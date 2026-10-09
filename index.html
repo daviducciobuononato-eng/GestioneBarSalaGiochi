@@ -98,7 +98,7 @@ function login(){
   const d=E('div',{class:'pin'},E('h2',{},'🍺 Gestione Bar'));
   if(needSetup){const n=E('input',{placeholder:'Il tuo nome'}),p=E('input',{type:'password',inputmode:'numeric',placeholder:'PIN 4–6 cifre',maxlength:6,style:'margin-top:8px'});d.append(E('p',{class:'mu'},'Prima configurazione: crea il Proprietario.'),n,p,E('div',{class:'neg',style:'min-height:22px'},msg),E('button',{class:'b',onclick:()=>/^\d{4,6}$/.test(p.value)&&n.value.trim()?setup(n.value.trim(),p.value):(msg='Nome e PIN 4–6 cifre',render())},'Crea e inizia'));msg='';return d}
   if(!sel){d.append(E('div',{class:'mu'},'Chi sei?'),...S.users.filter(u=>u.att).map(u=>E('button',{class:'b g',style:'display:block;width:100%;margin:8px 0',onclick:()=>{sel=u;pin='';render()}},u.nome)),E('div',{class:'neg'},msg));msg='';return d}
-  d.append(E('b',{},sel.nome),E('div',{class:'dots'},'●'.repeat(pin.length)|||'·'),E('div',{class:'neg',style:'min-height:22px'},msg));msg='';
+  d.append(E('b',{},sel.nome),E('div',{class:'dots'},'●'.repeat(pin.length) || '·'),E('div',{class:'neg',style:'min-height:22px'},msg));msg='';
   const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return render()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';render()});return}else if(pin.length<6)pin+=k;render()}},k)));
   d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';render()}},'← Cambia utente'));return d
 }
@@ -248,6 +248,10 @@ function admin(m){
  }
 }
 
+boot();
+</script>
+</body>
+</html>
 boot();
 </script>
 </body>
