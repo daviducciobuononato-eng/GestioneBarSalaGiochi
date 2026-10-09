@@ -134,7 +134,7 @@ function clienti(m,s){
  const totSospesi=S.clienti.reduce((a,x)=>a+(x.sospeso||0),0);
  m.append(
   E('div',{class:'k',style:'margin-bottom:12px'},
-   E('div',{class:'w'},E('small',{},'TOTALE SOSPESI DEBITI CLIENTILE'),E('b',{style:'font-size:24px'},eur(totSospesi)))
+   E('div',{class:'w'},E('small',{},'TOTALE SOSPESI DEBITI CLIENTI'),E('b',{style:'font-size:24px'},eur(totSospesi)))
   ),
   E('div',{class:'f'},
    E('button',{class:'b',onclick:()=>{
