@@ -48,11 +48,11 @@ const COL={users:'profili',cats:'cats',prods:'prods',ses:'ses',sales:'sales',mov
 let last={},unsub=[],unsubSM=[],curId=null,part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}},LD=new Set(),sel=null,needSetup=false,busy=false;
 const err=e=>{msg='Errore o operazione non consentita: '+(e.code||e.message);render()};
 const stamp=(k,d)=>(last[k]||(last[k]={}))[String(d.id)]=JSON.stringify(d);
-function save(){for(const k in COL){const L=last[k]||(last[k]={}),seen=new Set();for(const d of S[k]){const id=String(d.id),j=JSON.stringify(d);seen.add(id);if(L[id]!==j){L[id]=j;setDoc(doc(db,COL[k],id),JSON.parse(j)).catch(err)}}if(k==='cats'||k==='clienti')for(const id in L)if(!seen.has(id)){delete L[id];deleteDoc(doc(db,COL[k],id)).catch(err)}}}
+function save(){for(const k in COL){const L=last[k]||(last[k]={}),seen=new Set();for(const d of S[k]){const id=String(d.id),j=JSON.stringify(d);seen.add(id);if(L[id]!==j){L[id]=j;setDoc(doc(db,COL[k],id),JSON.parse(j)).catch(err)}}for(const id in L){if(!seen.has(id)){delete L[id];deleteDoc(doc(db,COL[k],id)).catch(err)}}}}
 function merge(){for(const k of['sales','mov']){S[k]=[...part[k].hist,...part[k].cur].sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d))}}
 function subSM(id){unsubSM.forEach(f=>f());unsubSM=[];if(!id)return;for(const k of['sales','mov'])unsubSM.push(onSnapshot(query(collection(db,k),where('s','==',id)),sn=>{part[k].cur=sn.docs.map(d=>d.data());merge();render()},err))}
 async function loadSes(id){if(!id||LD.has(id)||id===curId||!me)return;LD.add(id);try{const q=k=>getDocs(query(collection(db,k),where('s','==',id))),[a,b]=await Promise.all([q('sales'),q('mov')]);part.sales.hist.push(...a.docs.map(d=>d.data()));part.mov.hist.push(...b.docs.map(d=>d.data()));merge();render()}catch(e){LD.delete(id);err(e)}}
-function start(){stop();const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{S[k]=sn.docs.map(d=>d.data()).sort(cmp);last[k]={};S[k].forEach(d=>stamp('cats',d));f&&f();render()},err));
+function start(){stop();const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{S[k]=sn.docs.map(d=>d.data()).sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d));f&&f();render()},err));
  L('cats',collection(db,'cats'));L('prods',collection(db,'prods'));L('clienti',collection(db,'clienti'));
  L('ses',collection(db,'ses'),()=>{const c=cur()?.id||null;if(c!==curId){if(curId){part.sales.hist.push(...part.sales.cur);part.mov.hist.push(...part.mov.cur);LD.add(curId)}part.sales.cur=[];part.mov.cur=[];curId=c;subSM(c);merge()}});
  if(can('storico'))L('audit',query(collection(db,'audit'),orderBy('t','desc'),limit(150)))}
@@ -241,44 +241,61 @@ function storno(sale){const q={};sale.items.forEach(i=>q[i.pid]=0);const body=E(
 function mov(tipo){form(tipo==='entrata'?'Entrata manuale':'Uscita manuale',[{l:'Importo (€)',k:'i',m:'decimal'},{l:'Motivo (obbligatorio)',k:'m'}],v=>{const i=par(v.i);if(i<=0||!v.m){alert('Importo e motivo obbligatori');return false}S.mov.push({id:nid('m'),s:cur().id,tipo,imp:i,op:me.id,opn:me.nome,t:Date.now(),motivo:v.m});log('Movimento '+tipo,'cassa',`${eur(i)} – ${v.m}`);save();toast('Movimento registrato')})}
 function fondoMod(){const s=cur();form('Modifica fondo cassa',[{l:'Nuovo fondo (€)',k:'f',m:'decimal',v:(s.fondo/100).toFixed(2).replace('.',',')},{l:'Motivo',k:'m'}],v=>{const f=par(v.f);if(f<0||!v.m){alert('Motivo obbligatorio');return false}log('Cambio fondo','turno '+tn(s.id),`${eur(s.fondo)} → ${eur(f)} – ${v.m}`);s.fondo=f;save();toast('Fondo aggiornato')})}
 function chiudi(){const s=cur(),t=tot(s),r=E('input',{inputmode:'decimal',placeholder:'0,00'}),n=E('input',{placeholder:'Nota (facoltativa)'}),d=E('b',{});r.oninput=()=>{const x=par(r.value)-t.teo;d.className=x<0?'neg':x>0?'pos':'';d.textContent='Differenza: '+eur(x)};d.textContent='Differenza: –';
- modal('Chiusura cassa',E('div',{},E('div',{class:'row'},'Contante teorico',E('b',{},eur(t.teo))),fl('Contante realmente contato (€)',r),E('div',{style:'margin:8px 0'},d),fl('Nota',n)),[['Annulla',null,'g'],['Chiudi e azzera',()=>{if(!r.value){alert('Inserisci il contante contato');return false}const re=par(r.value);Object.assign(s,{ch:Date.now(),chn:me.nome,chiusa:me.id,reale:re,teo:t.teo,diff:re-t.teo,nota:n.value.trim()});log('Chiusura turno','turno '+tn(s.id),`Teorico ${eur(t.teo)}, contato ${eur(re)}, differenza ${eur(re-t.teo)}`);save();toast('Turno chiuso. Differenza: '+eur(s.diff))},'r']])}
+ modal('Chiusura cassa',E('div',{},E('div',{class:'row'},'Contante teorico',E('b',{},eur(t.teo))),fl('Contante réellement contato (€)',r),E('div',{style:'margin:8px 0'},d),fl('Nota',n)),[['Annulla',null,'g'],['Chiudi e azzera',()=>{if(!r.value){alert('Inserisci il contante contato');return false}const re=par(r.value);Object.assign(s,{ch:Date.now(),chn:me.nome,chiusa:me.id,reale:re,teo:t.teo,diff:re-t.teo,nota:n.value.trim()});log('Chiusura turno','turno '+tn(s.id),`Teorico ${eur(t.teo)}, contato ${eur(re)}, differenza ${eur(re-t.teo)}`);save();toast('Turno chiuso. Differenza: '+eur(s.diff))},'r']])}
 function csv(rows){return'\ufeff'+rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(';')).join('\n')}
 async function dl(name,data){try{const d=await window.claude?.use('downloads');if(d){await d.save({filename:name,data});return}}catch(e){if(e?.code==='declined')return}modal('Esporta CSV (copia il testo)',E('textarea',{rows:10},data),[['Chiudi',null,'g']])}
 
 async function deleteSes(shiftId){
  if(!confirm(`Sei sicuro di voler eliminare il Turno #${tn(shiftId)} e tutte le sue operazioni?`)) return;
  try {
-  await deleteDoc(doc(db, 'ses', String(shiftId)));
+  const sidStr = String(shiftId);
+  deleteDoc(doc(db, 'ses', sidStr)).catch(err);
+
   const salesToDelete = S.sales.filter(x => x.s === shiftId);
   const movToDelete = S.mov.filter(x => x.s === shiftId);
-  for (const sa of salesToDelete) deleteDoc(doc(db, 'sales', String(sa.id))).catch(err);
-  for (const mo of movToDelete) deleteDoc(doc(db, 'mov', String(mo.id))).catch(err);
-  
+  salesToDelete.forEach(sa => deleteDoc(doc(db, 'sales', String(sa.id))).catch(err));
+  movToDelete.forEach(mo => deleteDoc(doc(db, 'mov', String(mo.id))).catch(err));
+
   S.ses = S.ses.filter(x => x.id !== shiftId);
-  S.sales = S.sales.filter(x => x.s !== shiftId);
-  S.mov = S.mov.filter(x => x.s !== shiftId);
-  
-  if(last.ses) delete last.ses[String(shiftId)];
+  for(const k of ['sales','mov']){
+    part[k].cur = part[k].cur.filter(x => x.s !== shiftId);
+    part[k].hist = part[k].hist.filter(x => x.s !== shiftId);
+  }
+  merge();
+
+  if(last.ses) delete last.ses[sidStr];
   salesToDelete.forEach(sa => { if(last.sales) delete last.sales[String(sa.id)]; });
   movToDelete.forEach(mo => { if(last.mov) delete last.mov[String(mo.id)]; });
 
   log('Eliminato turno', 'turno #' + tn(shiftId), `Turno ID ${shiftId}`);
+  save();
   toast('Turno eliminato');
   render();
  } catch(e) { err(e); }
 }
 
 async function deleteAllSes(){
- if(!confirm("ATTENZIONE: Sei sicuro di voler eliminare TUTTI i turni e le relative vendite/movimenti? L'operazione non è reversibile!")) return;
+ if(!confirm("ATTENZIONE: Sei sicuro di voler eliminare TUTTI i turni e le relative vendite e movimenti? L'operazione non è reversibile!")) return;
  try {
-  for (const s of S.ses) deleteDoc(doc(db, 'ses', String(s.id))).catch(err);
-  for (const sa of S.sales) deleteDoc(doc(db, 'sales', String(sa.id))).catch(err);
-  for (const mo of S.mov) deleteDoc(doc(db, 'mov', String(mo.id))).catch(err);
-  
-  S.ses = []; S.sales = []; S.mov = [];
+  const sesIds = S.ses.map(x => String(x.id));
+  const salesIds = S.sales.map(x => String(x.id));
+  const movIds = S.mov.map(x => String(x.id));
+
+  for(const id of sesIds) deleteDoc(doc(db, 'ses', id)).catch(err);
+  for(const id of salesIds) deleteDoc(doc(db, 'sales', id)).catch(err);
+  for(const id of movIds) deleteDoc(doc(db, 'mov', id)).catch(err);
+
+  S.ses = [];
+  part.sales.cur = []; part.sales.hist = [];
+  part.mov.cur = []; part.mov.hist = [];
+  S.sales = []; S.mov = [];
+
   last.ses = {}; last.sales = {}; last.mov = {};
-  
+  LD = new Set();
+  curId = null;
+
   log('Eliminati tutti i turni', 'turni', 'Tutti i turni cancellati');
+  save();
   toast('Tutti i turni sono stati eliminati');
   render();
  } catch(e) { err(e); }
@@ -358,7 +375,6 @@ boot();
 </script>
 </body>
 </html>
-
 boot();
 </script>
 </body>
