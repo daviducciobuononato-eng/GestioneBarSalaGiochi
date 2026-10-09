@@ -39,24 +39,24 @@ eur=c=>(c<0?'−':'')+(Math.abs(c)/100).toFixed(2).replace('.',',')+' €',
 par=s=>Math.round(parseFloat(String(s).replace(',','.'))*100)||0,
 dt=t=>new Date(t).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}),
 RN={prop:'Proprietario',resp:'Responsabile',dip:'Dipendente'},
-PM={fondo:['prop','resp'],chiudi:['prop','resp'],catalogo:['prop','resp'],storico:['prop','resp'],utenti:['prop']},
+PM={fondo:['prop','resp'],chiudi:['prop','resp'],catalogo:['prop','resp'],storico:['prop','resp'],utenti:['prop'],clienti:['prop','resp','dip']},
 X0=0;
-let S={users:[],cats:[],prods:[],ses:[],sales:[],mov:[],audit:[]},me=null,tab='v',cat=null,cart={},pin='',idle,msg='',F={s:'',o:'',t:'',p:'',d:''};
+let S={users:[],cats:[],prods:[],ses:[],sales:[],mov:[],audit:[],clienti:[]},me=null,tab='v',cat=null,cart={},pin='',idle,msg='',F={s:'',o:'',t:'',p:'',d:''};
 const can=a=>me&&PM[a].includes(me.ruolo);
 const pw=p=>p+'-Bar#26';
-const COL={users:'profili',cats:'cats',prods:'prods',ses:'ses',sales:'sales',mov:'mov',audit:'audit'},cmp=(a,b)=>(a.id>b.id)-(a.id<b.id);
+const COL={users:'profili',cats:'cats',prods:'prods',ses:'ses',sales:'sales',mov:'mov',audit:'audit',clienti:'clienti'},cmp=(a,b)=>(a.id>b.id)-(a.id<b.id);
 let last={},unsub=[],unsubSM=[],curId=null,part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}},LD=new Set(),sel=null,needSetup=false,busy=false;
 const err=e=>{msg='Errore o operazione non consentita: '+(e.code||e.message);render()};
 const stamp=(k,d)=>(last[k]||(last[k]={}))[String(d.id)]=JSON.stringify(d);
-function save(){for(const k in COL){const L=last[k]||(last[k]={}),seen=new Set();for(const d of S[k]){const id=String(d.id),j=JSON.stringify(d);seen.add(id);if(L[id]!==j){L[id]=j;setDoc(doc(db,COL[k],id),JSON.parse(j)).catch(err)}}if(k==='cats')for(const id in L)if(!seen.has(id)){delete L[id];deleteDoc(doc(db,'cats',id)).catch(err)}}}
+function save(){for(const k in COL){const L=last[k]||(last[k]={}),seen=new Set();for(const d of S[k]){const id=String(d.id),j=JSON.stringify(d);seen.add(id);if(L[id]!==j){L[id]=j;setDoc(doc(db,COL[k],id),JSON.parse(j)).catch(err)}}if(k==='cats'||k==='clienti')for(const id in L)if(!seen.has(id)){delete L[id];deleteDoc(doc(db,COL[k],id)).catch(err)}}}
 function merge(){for(const k of['sales','mov']){S[k]=[...part[k].hist,...part[k].cur].sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d))}}
 function subSM(id){unsubSM.forEach(f=>f());unsubSM=[];if(!id)return;for(const k of['sales','mov'])unsubSM.push(onSnapshot(query(collection(db,k),where('s','==',id)),sn=>{part[k].cur=sn.docs.map(d=>d.data());merge();render()},err))}
 async function loadSes(id){if(!id||LD.has(id)||id===curId||!me)return;LD.add(id);try{const q=k=>getDocs(query(collection(db,k),where('s','==',id))),[a,b]=await Promise.all([q('sales'),q('mov')]);part.sales.hist.push(...a.docs.map(d=>d.data()));part.mov.hist.push(...b.docs.map(d=>d.data()));merge();render()}catch(e){LD.delete(id);err(e)}}
 function start(){stop();const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{S[k]=sn.docs.map(d=>d.data()).sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d));f&&f();render()},err));
- L('cats',collection(db,'cats'));L('prods',collection(db,'prods'));
+ L('cats',collection(db,'cats'));L('prods',collection(db,'prods'));L('clienti',collection(db,'clienti'));
  L('ses',collection(db,'ses'),()=>{const c=cur()?.id||null;if(c!==curId){if(curId){part.sales.hist.push(...part.sales.cur);part.mov.hist.push(...part.mov.cur);LD.add(curId)}part.sales.cur=[];part.mov.cur=[];curId=c;subSM(c);merge()}});
  if(can('storico'))L('audit',query(collection(db,'audit'),orderBy('t','desc'),limit(150)))}
-function stop(){unsub.forEach(f=>f());unsubSM.forEach(f=>f());unsub=[];unsubSM=[];for(const k of['cats','prods','ses','sales','mov','audit'])S[k]=[];last={users:last.users};part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}};LD=new Set();curId=null}
+function stop(){unsub.forEach(f=>f());unsubSM.forEach(f=>f());unsub=[];unsubSM=[];for(const k of['cats','prods','ses','sales','mov','audit','clienti'])S[k]=[];last={users:last.users};part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}};LD=new Set();curId=null}
 let LI=0;const nid=()=>LI=Math.max(LI+1,Date.now()*100+Math.floor(Math.random()*100));const tn=id=>'#'+(S.ses.findIndex(x=>x.id===id)+1),vn=id=>{const a=S.sales.find(x=>x.id===id);return'#'+S.sales.filter(x=>x.s===a?.s&&x.id<=id).length};
 const log=(az,ent,det)=>S.audit.push({id:nid('a'),u:me?.id,n:me?.nome||'sistema',az,ent,det,t:Date.now()});
 const LIST=`Bevande|Campari Soda:150,Cedrata San Pellegrino:150,Cocktail San Pellegrino:150,Kinley Lemon Taste:150,Yoga succo ACE:150,Yoga succo pera:150,Yoga succo albicocca:150,Yoga succo ananas:150,Estathé limone:200,Estathé pesca:200,Coca-Cola normale:150,Coca-Cola Zero:150,Coca-Cola Zero Zero:150,Red Bull:200,Peroni:150,Corona:250,Heineken:200,Bjorne Beer (la birra dell’orso):300,Tennent’s:300,Peroni Chill Lemon:150,Tuborg:150
@@ -90,13 +90,13 @@ function render(){clearTimeout(idle);const a=$('#app');a.replaceChildren();
  const s=cur();
  a.append(E('header',{},E('b',{},'🍺 Bar Sala Giochi',E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno aperto dal '+dt(s.ap):'Nessun turno aperto'}`)),E('button',{class:'b g s',onclick:cambioPin},'PIN'),E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')));
  const m=E('main');a.append(m);if(msg){m.append(E('div',{class:'cd pos'},msg));msg=''}
- ({v:vendita,t:turno,s:storico,a:admin})[tab](m,s);
- a.append(E('nav',{},[['v','Cassa'],['t','Turno'],can('storico')&&['s','Storico'],can('catalogo')&&['a','Gestione']].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))}
+ ({v:vendita,t:turno,c:clienti,s:storico,a:admin})[tab](m,s);
+ a.append(E('nav',{},[['v','Cassa'],['t','Turno'],['c','Clienti'],can('storico')&&['s','Storico'],can('catalogo')&&['a','Gestione']].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))}
 ['pointerdown','keydown'].forEach(e=>addEventListener(e,()=>{if(me){clearTimeout(idle);idle=setTimeout(()=>{lock()},120000)}}));
 function login(){const d=E('div',{class:'pin'},E('h2',{},'🍺 Gestione Bar'));
  if(needSetup){const n=E('input',{placeholder:'Il tuo nome'}),p=E('input',{type:'password',inputmode:'numeric',placeholder:'PIN 4–6 cifre',maxlength:6,style:'margin-top:8px'});d.append(E('p',{class:'mu'},'Prima configurazione: crea il Proprietario.'),n,p,E('div',{class:'neg',style:'min-height:22px'},msg),E('button',{class:'b',onclick:()=>/^\d{4,6}$/.test(p.value)&&n.value.trim()?setup(n.value.trim(),p.value):(msg='Nome e PIN 4–6 cifre',render())},'Crea e inizia'));msg='';return d}
  if(!sel){d.append(E('div',{class:'mu'},'Chi sei?'),...S.users.filter(u=>u.att).map(u=>E('button',{class:'b g',style:'display:block;width:100%;margin:8px 0',onclick:()=>{sel=u;pin='';render()}},u.nome)),E('div',{class:'neg'},msg));msg='';return d}
- d.append(E('b',{},sel.nome),E('div',{class:'dots'},'●'.repeat(pin.length)||'·'),E('div',{class:'neg',style:'min-height:22px'},msg));msg='';
+ d.append(E('b',{},sel.nome),E('div',{class:'dots'},'●'.repeat(pin.length)| mechanics||'·'),E('div',{class:'neg',style:'min-height:22px'},msg));msg='';
  const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return render()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';render()});return}else if(pin.length<6)pin+=k;render()}},k)));
  d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';render()}},'← Cambia utente'));return d}
 function vendita(m,s){
@@ -107,7 +107,21 @@ function vendita(m,s){
  const cd=E('div',{class:'cd',style:'margin-top:14px'},E('b',{},'Conto'),ids.length?'':E('div',{class:'mu'},'Tocca i prodotti per aggiungerli'));
  ids.forEach(i=>{const p=S.prods.find(x=>x.id==i);cd.append(E('div',{class:'row'},E('span',{},p.nome),E('span',{},E('button',{class:'b g s',onclick:()=>{cart[i]--;if(!cart[i])delete cart[i];render()}},'−'),' '+cart[i]+' ',E('button',{class:'b g s',onclick:()=>{cart[i]++;render()}},'+'),' '+eur(cart[i]*p.p))))});
  if(ids.length){const r=E('input',{inputmode:'decimal',placeholder:'Contanti ricevuti (facoltativo)'}),rs=E('div',{class:'mu'},'Resto: –');r.oninput=()=>{const c=par(r.value);rs.textContent=r.value?(c>=T?'Resto: '+eur(c-T):'Mancano '+eur(T-c)):'Resto: –'};
-  cd.append(E('div',{class:'row'},E('b',{},'TOTALE'),E('b',{},eur(T))),r,rs,E('div',{class:'ac'},E('button',{class:'b g',onclick:()=>{cart={};render()}},'Svuota'),E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>x.id==i);return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);S.sales.push({id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null});log('Vendita','vendita '+vn(n),eur(T));save();cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')))}
+  cd.append(E('div',{class:'row'},E('b',{},'TOTALE'),E('b',{},eur(T))),r,rs,E('div',{class:'ac'},
+    E('button',{class:'b g',onclick:()=>{cart={};render()}},'Svuota'),
+    E('button',{class:'b g',onclick:()=>{
+      if(!S.clienti.length){alert('Nessun cliente registrato. Aggiungine uno nella sezione Clienti.');return}
+      form('Segna a Sospeso',[{l:'Seleziona Cliente',k:'c',o:S.clienti.map(x=>[x.id,x.nome])},{l:'Note / Motivazione',k:'m'}],v=>{
+        const cli=S.clienti.find(x=>x.id==v.c);if(!cli)return false;
+        cli.sospeso=(cli.sospeso||0)+T;
+        const items=ids.map(i=>{const p=S.prods.find(x=>x.id==i);return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s');
+        S.sales.push({id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:null,sospesoCliente:cli.nome});
+        log('Vendita Sospesa',cli.nome,`${eur(T)} - ${v.m||'Sospeso'}`);save();cart={};
+        toast(`Segnati ${eur(T)} in sospeso a ${cli.nome}`);render();
+      })
+    }},'A SOSPESO'),
+    E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>x.id==i);return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);S.sales.push({id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null});log('Vendita','vendita '+vn(n),eur(T));save();cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
+  ))}
  m.append(cd)}
 function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'decimal',v:'100,00'}],v=>{const f=par(v.f);if(f<0)return false;const s={id:nid('t'),da:me.id,dan:me.nome,ap:Date.now(),fondo:f,ch:null};S.ses.push(s);log('Apertura turno','turno '+tn(s.id),'Fondo '+eur(f));save();toast('Turno aperto con fondo '+eur(f))})}
 function turno(m,s){
@@ -115,11 +129,61 @@ function turno(m,s){
  const t=tot(s);m.append(E('div',{class:'k'},[['Fondo iniziale',t.g*0+s.fondo],['Vendite lorde',t.g],['Storni / correzioni',-t.st],['Incasso netto',t.net],['Entrate manuali',t.en],['Uscite manuali',-t.us]].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
  if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
+
+function clienti(m,s){
+ const totSospesi=S.clienti.reduce((a,x)=>a+(x.sospeso||0),0);
+ m.append(
+  E('div',{class:'k',style:'margin-bottom:12px'},
+   E('div',{class:'w'},E('small',{},'TOTALE SOSPESI DEBITI CLIENTILE'),E('b',{style:'font-size:24px'},eur(totSospesi)))
+  ),
+  E('div',{class:'f'},
+   E('button',{class:'b',onclick:()=>{
+    form('Nuovo Cliente',[{l:'Nome e Cognome',k:'n'},{l:'Telefono (opzionale)',k:'t'}],v=>{
+     if(!v.n){alert('Nome obbligatorio');return false}
+     const c={id:nid('cli'),nome:v.n,tel:v.t||'',sospeso:0};
+     S.clienti.push(c);log('Nuovo cliente','cliente',v.n);save();toast('Cliente creato');render();
+    })
+   }},'+ Nuovo Cliente')
+  ),
+  E('h3',{},'Registro Clienti & Debiti')
+ );
+ if(!S.clienti.length){m.append(E('div',{class:'mu'},'Nessun cliente registrato.'));return}
+ const list=[...S.clienti].sort((a,b)=>(b.sospeso||0)-(a.sospeso||0)||a.nome.localeCompare(b.nome));
+ list.forEach(c=>{
+  const sosp=c.sospeso||0;
+  m.append(E('div',{class:'cd'},
+   E('div',{class:'row',style:'border:0'},
+    E('div',{},E('b',{},c.nome),c.tel?E('small',{class:'mu',style:'display:block'},c.tel):null),
+    E('b',{class:sosp>0?'neg':'pos',style:'font-size:18px'},eur(sosp))
+   ),
+   E('div',{class:'f',style:'margin-top:8px'},
+    E('button',{class:'b g s',onclick:()=>{
+     form(`Aggiungi Debito a ${c.nome}`,[{l:'Importo (€)',k:'i',m:'decimal'},{l:'Causale / Note',k:'m'}],v=>{
+      const imp=par(v.i);if(imp<=0){alert('Importo non valido');return false}
+      c.sospeso=(c.sospeso||0)+imp;log('Aggiunto debito',c.nome,`${eur(imp)} - ${v.m||'Sospeso'}`);save();toast('Debito registrato');render();
+     })
+    }},'+ Debito'),
+    E('button',{class:'b g s',onclick:()=>{
+     form(`Incassa Saldo da ${c.nome}`,[{l:'Importo incassato (€)',k:'i',m:'decimal',v:(sosp/100).toFixed(2).replace('.',',')},{l:'Causale / Note',k:'m'}],v=>{
+      const imp=par(v.i);if(imp<=0){alert('Importo non valido');return false}
+      c.sospeso=Math.max(0,(c.sospeso||0)-imp);log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);save();toast('Pagamento registrato');render();
+     })
+    }},'− Salda'),
+    sosp===0?E('button',{class:'b g s neg',style:'margin-left:auto',onclick:()=>{
+     if(confirm(`Eliminare il cliente ${c.nome}?`)){
+      S.clienti=S.clienti.filter(x=>x!==c);log('Cliente eliminato','cliente',c.nome);save();toast('Cliente eliminato');render();
+     }
+    }},'Elimina'):null
+   )
+  ))
+ });
+}
+
 function ops(sid,f){const L=[...S.sales.filter(x=>x.s===sid).map(x=>({...x,k:'vendita'})),...S.mov.filter(x=>x.s===sid).map(x=>({...x,k:x.tipo}))].filter(x=>(!f.o||(x.op==f.o))&&(!f.t||x.k===f.t)&&(!f.p||(x.items||[]).some(i=>i.n.toLowerCase().includes(f.p.toLowerCase())))&&(!f.d||new Date(x.t).toLocaleDateString('en-CA')===f.d)).sort((a,b)=>b.t-a.t),w=E('div',{});
  if(!L.length)w.append(E('div',{class:'mu'},'Nessuna operazione.'));
  L.forEach(x=>{const sale=x.k==='vendita',stt=sale?S.mov.some(m=>m.rif===x.id)?(x.items.every(i=>done(x,i.pid)>=i.q)?' · STORNATA':' · storno parziale'):'':'';
   const sg=x.k==='storno'||x.k==='uscita'?-1:1,op=S.users.find(u=>u.id===x.op)?.nome||x.opn||'';
-  w.append(E('div',{class:'cd'},E('div',{class:'row',style:'border:0'},E('b',{},sale?`Vendita ${vn(x.id)}${stt}`:x.k==='storno'?`Storno di ${vn(x.rif)}`:x.k==='entrata'?'Entrata manuale':'Uscita manuale'),E('b',{class:sg<0?'neg':'pos'},eur(sg*(sale?x.tot:x.imp)))),E('div',{class:'sm mu'},`${dt(x.t)} · ${op}${x.motivo?' · Motivo: '+x.motivo:''}`),x.items&&E('div',{class:'sm'},x.items.map(i=>i.q+'× '+i.n).join(', ')),sale&&!f.ro&&cur()?.id===sid&&E('button',{class:'b g s',style:'margin-top:6px',onclick:()=>storno(x)},'Storna / correggi')))});return w}
+  w.append(E('div',{class:'cd'},E('div',{class:'row',style:'border:0'},E('b',{},sale?`Vendita ${vn(x.id)}${stt}${x.sospesoCliente?' (SOSPESO: '+x.sospesoCliente+')':''}`:x.k==='storno'?`Storno di ${vn(x.rif)}`:x.k==='entrata'?'Entrata manuale':'Uscita manuale'),E('b',{class:sg<0?'neg':'pos'},eur(sg*(sale?x.tot:x.imp)))),E('div',{class:'sm mu'},`${dt(x.t)} · ${op}${x.motivo?' · Motivo: '+x.motivo:''}`),x.items&&E('div',{class:'sm'},x.items.map(i=>i.q+'× '+i.n).join(', ')),sale&&!f.ro&&cur()?.id===sid&&E('button',{class:'b g s',style:'margin-top:6px',onclick:()=>storno(x)},'Storna / correggi')))});return w}
 function storno(sale){const q={};sale.items.forEach(i=>q[i.pid]=0);const body=E('div',{}),mot=E('select',{},['Errore di battitura','Prodotto sbagliato','Cliente ha cambiato idea','Prodotto non disponibile','Altro'].map(x=>E('option',{},x))),note=E('input',{placeholder:'Dettaglio (obbligatorio se “Altro”)'}),tt=E('b',{});
  const upd=()=>tt.textContent='Importo da stornare: '+eur(sale.items.reduce((a,i)=>a+q[i.pid]*i.p,0));
  sale.items.forEach(i=>{const r=i.q-done(sale,i.pid),n=E('span',{},'0');body.append(E('div',{class:'row'},E('span',{},`${i.n} (${eur(i.p)}) · stornabili ${r}`),E('span',{},E('button',{class:'b g s',onclick:()=>{q[i.pid]=Math.max(0,q[i.pid]-1);n.textContent=q[i.pid];upd()}},'−'),' ',n,' ',E('button',{class:'b g s',onclick:()=>{q[i.pid]=Math.min(r,q[i.pid]+1);n.textContent=q[i.pid];upd()}},'+'))))});
