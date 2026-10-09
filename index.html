@@ -52,7 +52,7 @@ function save(){for(const k in COL){const L=last[k]||(last[k]={}),seen=new Set()
 function merge(){for(const k of['sales','mov']){S[k]=[...part[k].hist,...part[k].cur].sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d))}}
 function subSM(id){unsubSM.forEach(f=>f());unsubSM=[];if(!id)return;for(const k of['sales','mov'])unsubSM.push(onSnapshot(query(collection(db,k),where('s','==',id)),sn=>{part[k].cur=sn.docs.map(d=>d.data());merge();render()},err))}
 async function loadSes(id){if(!id||LD.has(id)||id===curId||!me)return;LD.add(id);try{const q=k=>getDocs(query(collection(db,k),where('s','==',id))),[a,b]=await Promise.all([q('sales'),q('mov')]);part.sales.hist.push(...a.docs.map(d=>d.data()));part.mov.hist.push(...b.docs.map(d=>d.data()));merge();render()}catch(e){LD.delete(id);err(e)}}
-function start(){stop();const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{S[k]=sn.docs.map(d=>d.data()).sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d));f&&f();render()},err));
+function start(){stop();const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{S[k]=sn.docs.map(d=>d.data()).sort(cmp);last[k]={};S[k].forEach(d=>stamp('cats',d));f&&f();render()},err));
  L('cats',collection(db,'cats'));L('prods',collection(db,'prods'));L('clienti',collection(db,'clienti'));
  L('ses',collection(db,'ses'),()=>{const c=cur()?.id||null;if(c!==curId){if(curId){part.sales.hist.push(...part.sales.cur);part.mov.hist.push(...part.mov.cur);LD.add(curId)}part.sales.cur=[];part.mov.cur=[];curId=c;subSM(c);merge()}});
  if(can('storico'))L('audit',query(collection(db,'audit'),orderBy('t','desc'),limit(150)))}
@@ -244,10 +244,72 @@ function chiudi(){const s=cur(),t=tot(s),r=E('input',{inputmode:'decimal',placeh
  modal('Chiusura cassa',E('div',{},E('div',{class:'row'},'Contante teorico',E('b',{},eur(t.teo))),fl('Contante realmente contato (€)',r),E('div',{style:'margin:8px 0'},d),fl('Nota',n)),[['Annulla',null,'g'],['Chiudi e azzera',()=>{if(!r.value){alert('Inserisci il contante contato');return false}const re=par(r.value);Object.assign(s,{ch:Date.now(),chn:me.nome,chiusa:me.id,reale:re,teo:t.teo,diff:re-t.teo,nota:n.value.trim()});log('Chiusura turno','turno '+tn(s.id),`Teorico ${eur(t.teo)}, contato ${eur(re)}, differenza ${eur(re-t.teo)}`);save();toast('Turno chiuso. Differenza: '+eur(s.diff))},'r']])}
 function csv(rows){return'\ufeff'+rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(';')).join('\n')}
 async function dl(name,data){try{const d=await window.claude?.use('downloads');if(d){await d.save({filename:name,data});return}}catch(e){if(e?.code==='declined')return}modal('Esporta CSV (copia il testo)',E('textarea',{rows:10},data),[['Chiudi',null,'g']])}
+
+async function deleteSes(shiftId){
+ if(!confirm(`Sei sicuro di voler eliminare il Turno #${tn(shiftId)} e tutte le sue operazioni?`)) return;
+ try {
+  await deleteDoc(doc(db, 'ses', String(shiftId)));
+  const salesToDelete = S.sales.filter(x => x.s === shiftId);
+  const movToDelete = S.mov.filter(x => x.s === shiftId);
+  for (const sa of salesToDelete) deleteDoc(doc(db, 'sales', String(sa.id))).catch(err);
+  for (const mo of movToDelete) deleteDoc(doc(db, 'mov', String(mo.id))).catch(err);
+  
+  S.ses = S.ses.filter(x => x.id !== shiftId);
+  S.sales = S.sales.filter(x => x.s !== shiftId);
+  S.mov = S.mov.filter(x => x.s !== shiftId);
+  
+  if(last.ses) delete last.ses[String(shiftId)];
+  salesToDelete.forEach(sa => { if(last.sales) delete last.sales[String(sa.id)]; });
+  movToDelete.forEach(mo => { if(last.mov) delete last.mov[String(mo.id)]; });
+
+  log('Eliminato turno', 'turno #' + tn(shiftId), `Turno ID ${shiftId}`);
+  toast('Turno eliminato');
+  render();
+ } catch(e) { err(e); }
+}
+
+async function deleteAllSes(){
+ if(!confirm("ATTENZIONE: Sei sicuro di voler eliminare TUTTI i turni e le relative vendite/movimenti? L'operazione non è reversibile!")) return;
+ try {
+  for (const s of S.ses) deleteDoc(doc(db, 'ses', String(s.id))).catch(err);
+  for (const sa of S.sales) deleteDoc(doc(db, 'sales', String(sa.id))).catch(err);
+  for (const mo of S.mov) deleteDoc(doc(db, 'mov', String(mo.id))).catch(err);
+  
+  S.ses = []; S.sales = []; S.mov = [];
+  last.ses = {}; last.sales = {}; last.mov = {};
+  
+  log('Eliminati tutti i turni', 'turni', 'Tutti i turni cancellati');
+  toast('Tutti i turni sono stati eliminati');
+  render();
+ } catch(e) { err(e); }
+}
+
 function storico(m){
  const sel=(k,l,o)=>E('select',{onchange:e=>{F[k]=e.target.value;render()}},E('option',{value:''},l),o.map(([v,n])=>E('option',{value:v,...(String(F[k])===String(v)?{selected:''}:{})},n)));
- m.append(E('h3',{},'Turni'),...[...S.ses].reverse().map(s=>{const t=tot(s);return E('div',{class:'cd',onclick:()=>{F.s=s.id;render()}},E('div',{class:'row',style:'border:0'},E('b',{},`Turno ${tn(s.id)}${s.ch?'':' (aperto)'}`),E('span',{class:'mu sm'},dt(s.ap))),E('div',{class:'sm'},`Fondo ${eur(s.fondo)} · Incasso netto ${eur(t.net)} · Teorico ${eur(t.teo)}`+(s.ch?` · Contato ${eur(s.reale)} · `:'')),s.ch&&E('b',{class:s.diff<0?'neg':s.diff>0?'pos':''},'Differenza '+eur(s.diff)),E('div',{class:'sm mu'},`Aperto da ${s.dan}${s.ch?' · chiuso da '+s.chn+' il '+dt(s.ch)+(s.nota?' · '+s.nota:''):''}`))}),E('h3',{},'Operazioni'),
-  E('div',{class:'f'},sel('s','Turno…',S.ses.map(s=>[s.id,'Turno '+tn(s.id)])),sel('o','Operatore…',S.users.map(u=>[u.id,u.nome])),sel('t','Tipo…',['vendita','storno','entrata','uscita'].map(x=>[x,x])),E('input',{placeholder:'Prodotto…',v:F.p,onchange:e=>{F.p=e.target.value;render()}}),E('input',{type:'date',v:F.d,onchange:e=>{F.d=e.target.value;render()}}),E('button',{class:'b g s',onclick:()=>{F={s:'',o:'',t:'',p:'',d:''};render()}},'Azzera filtri')));
+ m.append(
+  E('div',{class:'f',style:'align-items:center;justify-content:space-between;margin-bottom:8px'},
+   E('h3',{style:'margin:0'},'Turni'),
+   (can('storico') || me?.ruolo === 'prop') && S.ses.length ? E('button',{class:'b r s',onclick:deleteAllSes},'🗑️ Elimina tutti i turni') : null
+  ),
+  ...[...S.ses].reverse().map(s=>{
+   const t=tot(s);
+   return E('div',{class:'cd'},
+    E('div',{class:'row',style:'border:0'},
+     E('b',{},`Turno ${tn(s.id)}${s.ch?'':' (aperto)'}`),
+     E('span',{class:'mu sm'},dt(s.ap))
+    ),
+    E('div',{class:'sm'},`Fondo ${eur(s.fondo)} · Incasso netto ${eur(t.net)} · Teorico ${eur(t.teo)}`+(s.ch?` · Contato ${eur(s.reale)} · `:'')),
+    s.ch&&E('b',{class:s.diff<0?'neg':s.diff>0?'pos':''},'Differenza '+eur(s.diff)),
+    E('div',{class:'sm mu'},`Aperto da ${s.dan}${s.ch?' · chiuso da '+s.chn+' il '+dt(s.ch)+(s.nota?' · '+s.nota:''):''}`),
+    E('div',{class:'f',style:'margin-top:8px'},
+     E('button',{class:'b g s',onclick:()=>{F.s=s.id;render()}},'Vedi operazioni'),
+     (can('storico') || me?.ruolo === 'prop') ? E('button',{class:'b r s',onclick:()=>deleteSes(s.id)},'🗑️ Elimina') : null
+    )
+   )
+  }),
+  E('h3',{},'Operazioni'),
+  E('div',{class:'f'},sel('s','Turno…',S.ses.map(s=>[s.id,'Turno '+tn(s.id)])),sel('o','Operatore…',S.users.map(u=>[u.id,u.nome])),sel('t','Tipo…',['vendita','storno','entrata','uscita'].map(x=>[x,x])),E('input',{placeholder:'Prodotto…',v:F.p,onchange:e=>{F.p=e.target.value;render()}}),E('input',{type:'date',v:F.d,onchange:e=>{F.d=e.target.value;render()}}),E('button',{class:'b g s',onclick:()=>{F={s:'',o:'',t:'',p:'',d:''};render()}},'Azzera filtri'))
+ );
  if(!F.s&&S.ses.length)F.s=S.ses[S.ses.length-1].id;const ss=F.s?[+F.s]:[];loadSes(+F.s);ss.forEach(id=>m.append(E('div',{class:'mu sm'},'Turno '+tn(id)),ops(id,{...F,ro:1})));
  const ex=[['Turno','Tipo','Id','Data','Operatore','Importo €','Motivo','Dettaglio']];S.ses.forEach(s=>{S.sales.filter(x=>x.s===s.id).forEach(x=>ex.push([tn(s.id),'vendita',vn(x.id),dt(x.t),x.opn,x.tot/100,'',x.items.map(i=>i.q+'x '+i.n).join(', ')]));S.mov.filter(x=>x.s===s.id).forEach(x=>ex.push([tn(s.id),x.tipo,vn(x.id),dt(x.t),x.opn,x.imp/100,x.motivo,(x.items||[]).map(i=>i.q+'x '+i.n).join(', ')||'rif. '+vn(x.rif)]))});
  m.append(E('button',{class:'b g',onclick:()=>dl('operazioni.csv',csv(ex))},'⬇ Esporta operazioni CSV'),' ',E('button',{class:'b g',onclick:()=>dl('turni.csv',csv([['Turno','Apertura','Aperto da','Fondo','Teorico','Contato','Differenza','Chiusura','Chiuso da','Nota'],...S.ses.map(s=>[tn(s.id),dt(s.ap),s.dan,s.fondo/100,s.teo!=null?s.teo/100:tot(s).teo/100,s.reale!=null?s.reale/100:'',s.diff!=null?s.diff/100:'',s.ch?dt(s.ch):'',s.chn||'',s.nota||''])]))},'⬇ Esporta turni CSV'));
@@ -291,6 +353,11 @@ function admin(m){
   )
  }
 }
+
+boot();
+</script>
+</body>
+</html>
 
 boot();
 </script>
