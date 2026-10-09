@@ -165,10 +165,15 @@ function turno(m,s){
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
 
 function clienti(m,s){
- const totSospesi=S.clienti.reduce((a,x)=>a+(x.sospeso||0),0);
+ const totDebiti=S.clienti.filter(x=>(x.sospeso||0)>0).reduce((a,x)=>a+(x.sospeso||0),0);
+ const totCrediti=S.clienti.filter(x=>(x.sospeso||0)<0).reduce((a,x)=>a+Math.abs(x.sospeso||0),0);
  m.append(
   E('div',{class:'k',style:'margin-bottom:12px'},
-   E('div',{class:'w'},E('small',{},'TOTALE SOSPESI DEBITI CLIENTI'),E('b',{style:'font-size:24px'},eur(totSospesi)))
+   E('div',{class:'w'},
+    E('small',{},'TOTALE DEBITI CLIENTI'),
+    E('b',{style:'font-size:24px'},eur(totDebiti)),
+    totCrediti > 0 ? E('small',{style:'margin-top:4px;display:block;opacity:0.9'},`Totale Crediti a favore: +${eur(totCrediti)}`) : null
+   )
   ),
   E('div',{class:'f'},
    E('button',{class:'b',onclick:()=>{
@@ -185,10 +190,20 @@ function clienti(m,s){
  const list=[...S.clienti].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
  list.forEach(c=>{
   const sosp=c.sospeso||0;
+  let labelText = 'Saldo: 0,00 €';
+  let badgeClass = 'mu';
+  if(sosp > 0) {
+    labelText = 'Debito: ' + eur(sosp);
+    badgeClass = 'neg';
+  } else if(sosp < 0) {
+    labelText = 'Credito: +' + eur(Math.abs(sosp));
+    badgeClass = 'pos';
+  }
+
   m.append(E('div',{class:'cd'},
    E('div',{class:'row',style:'border:0'},
     E('div',{},E('b',{},c.nome),c.tel?E('small',{class:'mu',style:'display:block'},c.tel):null),
-    E('b',{class:sosp>0?'neg':'pos',style:'font-size:18px'},eur(sosp))
+    E('b',{class:badgeClass,style:'font-size:18px'},labelText)
    ),
    E('div',{class:'f',style:'margin-top:8px'},
     E('button',{class:'b g s',onclick:()=>{
@@ -198,9 +213,13 @@ function clienti(m,s){
      })
     }},'+ Debito'),
     E('button',{class:'b g s',onclick:()=>{
-     form(`Incassa Saldo da ${c.nome}`,[{l:'Importo incassato (€)',k:'i',m:'decimal',v:(sosp/100).toFixed(2).replace('.',',')},{l:'Causale / Note',k:'m'}],v=>{
+     const defaultVal = sosp > 0 ? (sosp/100).toFixed(2).replace('.',',') : '';
+     form(`Incassa Saldo / Pagamento da ${c.nome}`,[
+      {l:'Importo incassato (€)',k:'i',m:'decimal',v:defaultVal},
+      {l:'Causale / Note',k:'m'}
+     ],v=>{
       const imp=par(v.i);if(imp<=0){alert('Importo non valido');return false}
-      c.sospeso=Math.max(0,(c.sospeso||0)-imp);
+      c.sospeso=(c.sospeso||0)-imp;
       const activeShift = cur();
       if(activeShift){
         S.mov.push({
@@ -211,7 +230,7 @@ function clienti(m,s){
           op: me.id,
           opn: me.nome,
           t: Date.now(),
-          motivo: `Incasso saldo sospeso: ${c.nome}${v.m ? ' – ' + v.m : ''}`
+          motivo: `Incasso saldo/pagamento: ${c.nome}${v.m ? ' – ' + v.m : ''}`
         });
       }
       log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);save();toast('Pagamento e incasso in cassa registrati');render();
@@ -371,10 +390,6 @@ function admin(m){
  }
 }
 
-boot();
-</script>
-</body>
-</html>
 boot();
 </script>
 </body>
