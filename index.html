@@ -93,12 +93,16 @@ function render(){clearTimeout(idle);const a=$('#app');a.replaceChildren();
  ({v:vendita,t:turno,c:clienti,s:storico,a:admin})[tab](m,s);
  a.append(E('nav',{},[['v','Cassa'],['t','Turno'],['c','Clienti'],can('storico')&&['s','Storico'],can('catalogo')&&['a','Gestione']].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))}
 ['pointerdown','keydown'].forEach(e=>addEventListener(e,()=>{if(me){clearTimeout(idle);idle=setTimeout(()=>{lock()},120000)}}));
-function login(){const d=E('div',{class:'pin'},E('h2',{},'🍺 Gestione Bar'));
- if(needSetup){const n=E('input',{placeholder:'Il tuo nome'}),p=E('input',{type:'password',inputmode:'numeric',placeholder:'PIN 4–6 cifre',maxlength:6,style:'margin-top:8px'});d.append(E('p',{class:'mu'},'Prima configurazione: crea il Proprietario.'),n,p,E('div',{class:'neg',style:'min-height:22px'},msg),E('button',{class:'b',onclick:()=>/^\d{4,6}$/.test(p.value)&&n.value.trim()?setup(n.value.trim(),p.value):(msg='Nome e PIN 4–6 cifre',render())},'Crea e inizia'));msg='';return d}
- if(!sel){d.append(E('div',{class:'mu'},'Chi sei?'),...S.users.filter(u=>u.att).map(u=>E('button',{class:'b g',style:'display:block;width:100%;margin:8px 0',onclick:()=>{sel=u;pin='';render()}},u.nome)),E('div',{class:'neg'},msg));msg='';return d}
- d.append(E('b',{},sel.nome),E('div',{class:'dots'},'●'.repeat(pin.length)| mechanics||'·'),E('div',{class:'neg',style:'min-height:22px'},msg));msg='';
- const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return render()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';render()});return}else if(pin.length<6)pin+=k;render()}},k)));
- d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';render()}},'← Cambia utente'));return d}
+
+function login(){
+  const d=E('div',{class:'pin'},E('h2',{},'🍺 Gestione Bar'));
+  if(needSetup){const n=E('input',{placeholder:'Il tuo nome'}),p=E('input',{type:'password',inputmode:'numeric',placeholder:'PIN 4–6 cifre',maxlength:6,style:'margin-top:8px'});d.append(E('p',{class:'mu'},'Prima configurazione: crea il Proprietario.'),n,p,E('div',{class:'neg',style:'min-height:22px'},msg),E('button',{class:'b',onclick:()=>/^\d{4,6}$/.test(p.value)&&n.value.trim()?setup(n.value.trim(),p.value):(msg='Nome e PIN 4–6 cifre',render())},'Crea e inizia'));msg='';return d}
+  if(!sel){d.append(E('div',{class:'mu'},'Chi sei?'),...S.users.filter(u=>u.att).map(u=>E('button',{class:'b g',style:'display:block;width:100%;margin:8px 0',onclick:()=>{sel=u;pin='';render()}},u.nome)),E('div',{class:'neg'},msg));msg='';return d}
+  d.append(E('b',{},sel.nome),E('div',{class:'dots'},'●'.repeat(pin.length)|||'·'),E('div',{class:'neg',style:'min-height:22px'},msg));msg='';
+  const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return render()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';render()});return}else if(pin.length<6)pin+=k;render()}},k)));
+  d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';render()}},'← Cambia utente'));return d
+}
+
 function vendita(m,s){
  if(!s){m.append(E('div',{class:'cd'},E('b',{},'Nessun turno aperto'),E('p',{class:'mu'},'Solo Proprietario o Responsabile possono aprire il turno.'),can('fondo')&&E('button',{class:'b',onclick:apri},'Apri turno e imposta fondo cassa')));return}
  const cs=S.cats.filter(c=>c.att);cat=cs.find(c=>c.id===cat)?cat:cs[0]?.id;
@@ -127,7 +131,7 @@ function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'deci
 function turno(m,s){
  if(!s){m.append(E('div',{class:'cd mu'},'Nessun turno aperto.',can('fondo')&&E('div',{},E('button',{class:'b',style:'margin-top:8px',onclick:apri},'Apri turno'))));return}
  const t=tot(s);m.append(E('div',{class:'k'},[['Fondo iniziale',t.g*0+s.fondo],['Vendite lorde',t.g],['Storni / correzioni',-t.st],['Incasso netto',t.net],['Entrate manuali',t.en],['Uscite manuali',-t.us]].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
- if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
+ if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:()=>fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
 
 function clienti(m,s){
@@ -204,12 +208,47 @@ function storico(m){
  const ex=[['Turno','Tipo','Id','Data','Operatore','Importo €','Motivo','Dettaglio']];S.ses.forEach(s=>{S.sales.filter(x=>x.s===s.id).forEach(x=>ex.push([tn(s.id),'vendita',vn(x.id),dt(x.t),x.opn,x.tot/100,'',x.items.map(i=>i.q+'x '+i.n).join(', ')]));S.mov.filter(x=>x.s===s.id).forEach(x=>ex.push([tn(s.id),x.tipo,vn(x.id),dt(x.t),x.opn,x.imp/100,x.motivo,(x.items||[]).map(i=>i.q+'x '+i.n).join(', ')||'rif. '+vn(x.rif)]))});
  m.append(E('button',{class:'b g',onclick:()=>dl('operazioni.csv',csv(ex))},'⬇ Esporta operazioni CSV'),' ',E('button',{class:'b g',onclick:()=>dl('turni.csv',csv([['Turno','Apertura','Aperto da','Fondo','Teorico','Contato','Differenza','Chiusura','Chiuso da','Nota'],...S.ses.map(s=>[tn(s.id),dt(s.ap),s.dan,s.fondo/100,s.teo!=null?s.teo/100:tot(s).teo/100,s.reale!=null?s.reale/100:'',s.diff!=null?s.diff/100:'',s.ch?dt(s.ch):'',s.chn||'',s.nota||''])]))},'⬇ Esporta turni CSV'));
  m.append(E('h3',{},'Registro attività'),...[...S.audit].reverse().slice(0,150).filter(a=>!F.o||a.u==F.o).map(a=>E('div',{class:'row sm'},E('span',{},E('b',{},a.az),' · '+a.ent+' · '+a.det),E('span',{class:'mu'},a.n+' · '+dt(a.t)))))}
+
 function admin(m){
  m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;S.cats.push({id:nid('c'),nome:v.n,att:1});log('Nuova categoria','categoria',v.n);save();render()})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:S.cats.map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;S.prods.push({id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1});log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`);save();render()})},'+ Prodotto')));
  S.cats.forEach(c=>{const d=E('details',{class:'cd'},E('summary',{},E('b',{},c.nome+(c.att?'':' (disattiva)')),' ',E('span',{class:'mu sm'},S.prods.filter(p=>p.c===c.id).length+' prodotti')));
-  d.append(E('div',{class:'f'},E('button',{class:'b g s',onclick:()=>{c.att=c.att?0:1;log(c.att?'Categoria riattivata':'Categoria disattivata','categoria',c.nome);save();render()}},c.att?'Disattiva categoria':'Riattiva'),E('button',{class:'b g s',onclick:()=>{if(S.prods.some(p=>p.c===c.id)){alert('Categoria non vuota: sposta o disattiva i prodotti, oppure disattivala.');return}if(confirm('Eliminare la categoria?')){S.cats=S.cats.filter(x=>x!==c);log('Categoria eliminata','categoria',c.nome);save();render()}}},'Elimina')));
-  S.prods.filter(p=>p.c===c.id).forEach(p=>d.append(E('div',{class:'row'},E('span',{style:'flex:1;opacity:'+(p.att?1:.45)},p.nome),E('input',{style:'width:80px',inputmode:'decimal',v:(p.p/100).toFixed(2).replace('.',','),onchange:e=>{const n=par(e.target.value);if(n>0){log('Cambio prezzo',p.nome,`${eur(p.p)} → ${eur(n)}`);p.p=n;save()}}}),E('select',{style:'width:110px',onchange:e=>{const n=S.cats.find(x=>x.id==e.target.value);log('Spostato',p.nome,`→ ${n.nome}`);p.c=n.id;save();render()}},S.cats.map(x=>E('option',{value:x.id,...(x.id===p.c?{selected:''}:{})},x.nome))),E('button',{class:'b g s',onclick:()=>{p.att=p.att?0:1;log(p.att?'Prodotto riattivato':'Prodotto disattivato','prodotto',p.nome);save();render()}},p.att?'Off':'On'))));m.append(d)});
- if(can('utenti')){m.append(E('h3',{},'Utenti'),E('button',{class:'b g',onclick:()=>form('Nuovo utente',[{l:'Nome',k:'n'},{l:'Ruolo',k:'r',o:Object.entries(RN),v:'dip'},{l:'PIN (4–6 cifre)',k:'p',m:'numeric'}],v=>newUser(v.n,v.r,v.p))},'+ Utente'));
-  S.users.forEach(u=>m.append(E('div',{class:'cd'},E('div',{class:'row',style:'border:0'},E('b',{style:'opacity:'+(u.att?1:.45)},u.nome),E('select',{style:'width:150px',onchange:e=>{if(u===me&&e.target.value!=='prop'&&S.users.filter(x=>x.att&&x.ruolo==='prop').length<2){alert('Serve almeno un Proprietario');return render()}log('Cambio ruolo',u.nome,`${RN[u.ruolo]} → ${RN[e.target.value]}`);u.ruolo=e.target.value;save();render()}},Object.entries(RN).map(([k,n])=>E('option',{value:k,...(u.ruolo===k?{selected:''}:{})},n)))),E('div',{class:'f'},E('button',{class:'b g s',onclick:()=>form('Nuovo PIN per '+u.nome,[{l:'PIN (4–6 cifre)',k:'p',m:'numeric'}],async v=>{const r=await newUser(u.nome,u.ruolo,v.p);if(r===false)return false;u.att=0;save();render()})},'Reset PIN'),u!==me&&E('button',{class:'b g s',onclick:()=>{u.att=u.att?0:1;log(u.att?'Utente riattivato':'Utente disattivato','utente',u.nome);save();render()}},u.att?'Disattiva':'Riattiva')))))}}
-boot();navigator.serviceWorker?.register('sw.js').catch(()=>{});
-</script></body></html>
+  d.append(E('div',{class:'f'},E('button',{class:'b g s',onclick:()=>{c.att=c.att?0:1;log(c.att?'Categoria riattivata':'Categoria disattivata','categoria',c.nome);save();render()}},c.att?'Disattiva categoria':'Riattiva categoria')));
+  S.prods.filter(p=>p.c===c.id).forEach(p=>{
+    d.append(E('div',{class:'row'},
+      E('span',{},p.nome+' · '+eur(p.p)+(p.att?'':' (disattivo)')),
+      E('span',{},
+        E('button',{class:'b g s',onclick:()=>{
+          form('Modifica prodotto',[{l:'Nome',k:'n',v:p.nome},{l:'Prezzo (€)',k:'p',m:'decimal',v:(p.p/100).toFixed(2).replace('.',',')}],v=>{
+            if(!v.n||par(v.p)<=0)return false;
+            p.nome=v.n;p.p=par(v.p);log('Modifica prodotto','prodotto',`${v.n} ${eur(p.p)}`);save();render();
+          })
+        }},'Modifica'),
+        ' ',
+        E('button',{class:'b g s',onclick:()=>{p.att=p.att?0:1;log(p.att?'Prodotto riattivato':'Prodotto disattivato','prodotto',p.nome);save();render()}},p.att?'Disattiva':'Riattiva')
+      )
+    ))
+  });
+  m.append(d);
+ });
+
+ if(can('utenti')){
+  m.append(E('h3',{},'Utenti & Permessi'),
+    E('button',{class:'b g',style:'margin-bottom:10px',onclick:()=>{
+      form('Nuovo utente',[{l:'Nome',k:'n'},{l:'Ruolo',k:'r',o:[['dip','Dipendente'],['resp','Responsabile'],['prop','Proprietario']]},{l:'PIN (4–6 cifre)',k:'p',m:'numeric'}],async v=>{
+        return await newUser(v.n,v.r,v.p);
+      })
+    }},'+ Nuovo utente'),
+    ...S.users.map(u=>E('div',{class:'cd'},
+      E('div',{class:'row',style:'border:0'},
+        E('b',{},u.nome+' ('+RN[u.ruolo]+')'+(u.att?'':' (disattivo)')),
+        u.id!==me.id?E('button',{class:'b g s',onclick:()=>{u.att=u.att?0:1;log(u.att?'Utente riattivato':'Utente disattivato','utente',u.nome);save();render()}},u.att?'Disattiva':'Riattiva'):null
+      )
+    ))
+  )
+ }
+}
+
+boot();
+</script>
+</body>
+</html>
