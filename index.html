@@ -78,7 +78,17 @@ async function newUser(nome,ruolo,p){if(!nome||!/^\d{4,6}$/.test(p)){alert('Nome
  try{const a2=getAuth(initializeApp(firebaseConfig,'s'+Date.now())),email=nome.toLowerCase().replace(/[^a-z0-9]/g,'')+Math.floor(Math.random()*9e4+1e4)+'@bar.app',c=await createUserWithEmailAndPassword(a2,email,pw(p));await signOut(a2);S.users.push({id:c.user.uid,nome,ruolo,att:1,email});log('Nuovo utente','utente',`${nome} (${RN[ruolo]})`);save();render()}catch(e){alert('Errore: '+(e.code||e.message));return false}}
 function cambioPin(){form('Cambia il tuo PIN',[{l:'Nuovo PIN (4–6 cifre)',k:'p',m:'numeric'}],async v=>{if(!/^\d{4,6}$/.test(v.p)){alert('PIN di 4–6 cifre');return false}try{await updatePassword(auth.currentUser,pw(v.p));log('Cambio PIN','utente',me.nome);save();toast('PIN aggiornato')}catch(e){alert('Esci e rientra, poi riprova ('+(e.code||e.message)+')');return false}})}
 const cur=()=>S.ses.find(s=>!s.ch);
-function tot(s){const v=S.sales.filter(x=>x.s===s.id),m=S.mov.filter(x=>x.s===s.id),g=v.reduce((a,x)=>a+x.tot,0),st=m.filter(x=>x.tipo==='storno').reduce((a,x)=>a+x.imp,0),en=m.filter(x=>x.tipo==='entrata').reduce((a,x)=>a+x.imp,0),us=m.filter(x=>x.tipo==='uscita').reduce((a,x)=>a+x.imp,0);return{g,st,net:g-st,en,us,teo:s.fondo+g-st+en-us}}
+
+function tot(s){
+ const v=S.sales.filter(x=>x.s===s.id),m=S.mov.filter(x=>x.s===s.id),
+ g=v.reduce((a,x)=>a+x.tot,0),
+ cashSales=v.filter(x=>!x.sospesoCliente).reduce((a,x)=>a+x.tot,0),
+ st=m.filter(x=>x.tipo==='storno').reduce((a,x)=>a+x.imp,0),
+ en=m.filter(x=>x.tipo==='entrata').reduce((a,x)=>a+x.imp,0),
+ us=m.filter(x=>x.tipo==='uscita').reduce((a,x)=>a+x.imp,0);
+ return{g,st,net:g-st,en,us,teo:s.fondo+cashSales-st+en-us};
+}
+
 const done=(sale,pid)=>S.mov.filter(m=>m.rif===sale.id&&m.tipo==='storno').reduce((a,m)=>a+(m.items.find(i=>i.pid===pid)?.q||0),0);
 function modal(t,body,acts){const o=E('div',{class:'ov',onclick:e=>e.target===o&&o.remove()},E('div',{class:'md'},E('h3',{},t),body,E('div',{class:'ac'},acts.map(([l,f,c])=>E('button',{class:'b '+(c||''),onclick:async()=>{if(!f||await f()!==false)o.remove()}},l)))));document.body.append(o);return o}
 const fl=(l,i)=>E('div',{},E('label',{},l),i);
@@ -114,15 +124,35 @@ function vendita(m,s){
   cd.append(E('div',{class:'row'},E('b',{},'TOTALE'),E('b',{},eur(T))),r,rs,E('div',{class:'ac'},
     E('button',{class:'b g',onclick:()=>{cart={};render()}},'Svuota'),
     E('button',{class:'b g',onclick:()=>{
-      if(!S.clienti.length){alert('Nessun cliente registrato. Aggiungine uno nella sezione Clienti.');return}
-      form('Segna a Sospeso',[{l:'Seleziona Cliente',k:'c',o:S.clienti.map(x=>[x.id,x.nome])},{l:'Note / Motivazione',k:'m'}],v=>{
-        const cli=S.clienti.find(x=>x.id==v.c);if(!cli)return false;
-        cli.sospeso=(cli.sospeso||0)+T;
-        const items=ids.map(i=>{const p=S.prods.find(x=>x.id==i);return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s');
-        S.sales.push({id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:null,sospesoCliente:cli.nome});
-        log('Vendita Sospesa',cli.nome,`${eur(T)} - ${v.m||'Sospeso'}`);save();cart={};
-        toast(`Segnati ${eur(T)} in sospeso a ${cli.nome}`);render();
-      })
+      const sortedClients = [...S.clienti].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
+      const opts = [['NEW', '➕ CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
+      form('Segna a Sospeso', [
+        {l:'Seleziona Cliente', k:'c', o: opts},
+        {l:'Nome nuovo cliente (se stai creando un nuovo cliente)', k:'new_name'},
+        {l:'Telefono nuovo cliente (opzionale)', k:'new_tel'},
+        {l:'Note / Motivazione', k:'m'}
+      ], v => {
+        let cli = null;
+        if (v.c === 'NEW' || (!v.c && v.new_name)) {
+          if (!v.new_name) { alert('Inserisci il nome del nuovo cliente.'); return false; }
+          cli = { id: nid('cli'), nome: v.new_name, tel: v.new_tel || '', sospeso: 0 };
+          S.clienti.push(cli);
+          log('Nuovo cliente', 'cliente', v.new_name);
+        } else if (v.c) {
+          cli = S.clienti.find(x => String(x.id) === String(v.c));
+        }
+        if (!cli) { alert('Seleziona un cliente o inserisci il nome di un nuovo cliente.'); return false; }
+
+        cli.sospeso = (cli.sospeso || 0) + T;
+        const items = ids.map(i => { const p = S.prods.find(x => x.id == i); return { pid: p.id, n: p.nome, p: p.p, q: cart[i] }; });
+        const n = nid('s');
+        S.sales.push({ id: n, s: s.id, op: me.id, opn: me.nome, t: Date.now(), tot: T, items, cash: null, sospesoCliente: cli.nome });
+        log('Vendita Sospesa', cli.nome, `${eur(T)} - ${v.m || 'Sospeso'}`);
+        save();
+        cart = {};
+        toast(`Segnati ${eur(T)} in sospeso a ${cli.nome}`);
+        render();
+      });
     }},'A SOSPESO'),
     E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>x.id==i);return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);S.sales.push({id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null});log('Vendita','vendita '+vn(n),eur(T));save();cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
   ))}
@@ -152,7 +182,7 @@ function clienti(m,s){
   E('h3',{},'Registro Clienti & Debiti')
  );
  if(!S.clienti.length){m.append(E('div',{class:'mu'},'Nessun cliente registrato.'));return}
- const list=[...S.clienti].sort((a,b)=>(b.sospeso||0)-(a.sospeso||0)||a.nome.localeCompare(b.nome));
+ const list=[...S.clienti].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
  list.forEach(c=>{
   const sosp=c.sospeso||0;
   m.append(E('div',{class:'cd'},
@@ -170,7 +200,21 @@ function clienti(m,s){
     E('button',{class:'b g s',onclick:()=>{
      form(`Incassa Saldo da ${c.nome}`,[{l:'Importo incassato (€)',k:'i',m:'decimal',v:(sosp/100).toFixed(2).replace('.',',')},{l:'Causale / Note',k:'m'}],v=>{
       const imp=par(v.i);if(imp<=0){alert('Importo non valido');return false}
-      c.sospeso=Math.max(0,(c.sospeso||0)-imp);log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);save();toast('Pagamento registrato');render();
+      c.sospeso=Math.max(0,(c.sospeso||0)-imp);
+      const activeShift = cur();
+      if(activeShift){
+        S.mov.push({
+          id: nid('m'),
+          s: activeShift.id,
+          tipo: 'entrata',
+          imp: imp,
+          op: me.id,
+          opn: me.nome,
+          t: Date.now(),
+          motivo: `Incasso saldo sospeso: ${c.nome}${v.m ? ' – ' + v.m : ''}`
+        });
+      }
+      log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);save();toast('Pagamento e incasso in cassa registrati');render();
      })
     }},'− Salda'),
     sosp===0?E('button',{class:'b g s neg',style:'margin-left:auto',onclick:()=>{
@@ -248,10 +292,6 @@ function admin(m){
  }
 }
 
-boot();
-</script>
-</body>
-</html>
 boot();
 </script>
 </body>
