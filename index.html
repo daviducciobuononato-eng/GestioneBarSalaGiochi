@@ -218,21 +218,23 @@ function clienti(m,s){
       {l:'Importo incassato (€)',k:'i',m:'decimal',v:defaultVal},
       {l:'Causale / Note',k:'m'}
      ],v=>{
+      const activeShift = cur();
+      if(!activeShift){
+        alert('Impossibile incassare: nessun turno aperto! Apri prima un turno.');
+        return false;
+      }
       const imp=par(v.i);if(imp<=0){alert('Importo non valido');return false}
       c.sospeso=(c.sospeso||0)-imp;
-      const activeShift = cur();
-      if(activeShift){
-        S.mov.push({
-          id: nid('m'),
-          s: activeShift.id,
-          tipo: 'entrata',
-          imp: imp,
-          op: me.id,
-          opn: me.nome,
-          t: Date.now(),
-          motivo: `Incasso saldo/pagamento: ${c.nome}${v.m ? ' – ' + v.m : ''}`
-        });
-      }
+      S.mov.push({
+        id: nid('m'),
+        s: activeShift.id,
+        tipo: 'entrata',
+        imp: imp,
+        op: me.id,
+        opn: me.nome,
+        t: Date.now(),
+        motivo: `Incasso saldo/pagamento: ${c.nome}${v.m ? ' – ' + v.m : ''}`
+      });
       log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);save();toast('Pagamento e incasso in cassa registrati');render();
      })
     }},'− Salda'),
@@ -391,6 +393,9 @@ function admin(m){
 }
 
 boot();
+</script>
+</body>
+</html>
 </script>
 </body>
 </html>
