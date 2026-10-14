@@ -26,6 +26,9 @@ input,select,textarea{font:inherit;padding:10px;border:1px solid var(--ln);borde
 .md label{display:block;margin:8px 0 2px;color:var(--mu);font-size:14px}.ac{display:flex;gap:8px;margin-top:14px}.ac button{flex:1}
 .pin{max-width:320px;margin:8vh auto;text-align:center;padding:12px}.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}.pad button{padding:18px;font-size:22px;border-radius:14px;border:1px solid var(--ln);background:var(--cd);color:var(--fg)}
 .dots{font-size:30px;letter-spacing:8px;min-height:44px}.f{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.f>*{flex:1;min-width:120px}
+.storico-list{margin-top:10px;border-top:1px solid var(--ln);padding-top:8px}
+.storico-item{padding:8px 0;border-bottom:1px dashed var(--ln);font-size:13px}
+.storico-item:last-child{border-bottom:0}
 </style></head><body><div id="app"></div>
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
@@ -38,6 +41,7 @@ E=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k.start
 eur=c=>(c<0?'−':'')+(Math.abs(c)/100).toFixed(2).replace('.',',')+' €',
 par=s=>Math.round(parseFloat(String(s).replace(',','.'))*100)||0,
 dt=t=>new Date(t).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}),
+dtFull=t=>{const d=new Date(t);return isNaN(d)?'':d.toLocaleString('it-IT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})},
 RN={prop:'Proprietario',resp:'Responsabile',dip:'Dipendente'},
 PM={fondo:['prop','resp'],chiudi:['prop','resp'],catalogo:['prop','resp'],storico:['prop','resp'],utenti:['prop'],clienti:['prop','resp','dip']},
 X0=0;
@@ -52,7 +56,7 @@ function save(){for(const k in COL){const L=last[k]||(last[k]={}),seen=new Set()
 function merge(){for(const k of['sales','mov']){S[k]=[...part[k].hist,...part[k].cur].sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d))}}
 function subSM(id){unsubSM.forEach(f=>f());unsubSM=[];if(!id)return;for(const k of['sales','mov'])unsubSM.push(onSnapshot(query(collection(db,k),where('s','==',id)),sn=>{part[k].cur=sn.docs.map(d=>d.data());merge();render()},err))}
 async function loadSes(id){if(!id||LD.has(id)||id===curId||!me)return;LD.add(id);try{const q=k=>getDocs(query(collection(db,k),where('s','==',id))),[a,b]=await Promise.all([q('sales'),q('mov')]);part.sales.hist.push(...a.docs.map(d=>d.data()));part.mov.hist.push(...b.docs.map(d=>d.data()));merge();render()}catch(e){LD.delete(id);err(e)}}
-function start(){stop();const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{S[k]=sn.docs.map(d=>d.data()).sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d));f&&f();render()},err));
+function start(){stop();const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{S[k]=sn.docs.map(d=>d.data()).sort(cmp);last[k]={};S[k].forEach(d=>stamp('clienti',d));f&&f();render()},err));
  L('cats',collection(db,'cats'));L('prods',collection(db,'prods'));L('clienti',collection(db,'clienti'));
  L('ses',collection(db,'ses'),()=>{const c=cur()?.id||null;if(c!==curId){if(curId){part.sales.hist.push(...part.sales.cur);part.mov.hist.push(...part.mov.cur);LD.add(curId)}part.sales.cur=[];part.mov.cur=[];curId=c;subSM(c);merge()}});
  if(can('storico'))L('audit',query(collection(db,'audit'),orderBy('t','desc'),limit(150)))}
@@ -135,7 +139,7 @@ function vendita(m,s){
         let cli = null;
         if (v.c === 'NEW' || (!v.c && v.new_name)) {
           if (!v.new_name) { alert('Inserisci il nome del nuovo cliente.'); return false; }
-          cli = { id: nid('cli'), nome: v.new_name, tel: v.new_tel || '', sospeso: 0 };
+          cli = { id: nid('cli'), nome: v.new_name, tel: v.new_tel || '', sospeso: 0, storico: [] };
           S.clienti.push(cli);
           log('Nuovo cliente', 'cliente', v.new_name);
         } else if (v.c) {
@@ -144,9 +148,22 @@ function vendita(m,s){
         if (!cli) { alert('Seleziona un cliente o inserisci il nome di un nuovo cliente.'); return false; }
 
         cli.sospeso = (cli.sospeso || 0) + T;
+        cli.storico = cli.storico || [];
         const items = ids.map(i => { const p = S.prods.find(x => x.id == i); return { pid: p.id, n: p.nome, p: p.p, q: cart[i] }; });
         const n = nid('s');
         S.sales.push({ id: n, s: s.id, op: me.id, opn: me.nome, t: Date.now(), tot: T, items, cash: null, sospesoCliente: cli.nome });
+        
+        cli.storico.push({
+          id: nid('st'),
+          t: Date.now(),
+          sNum: tn(s.id),
+          opn: me.nome,
+          tipo: 'sospeso_cassa',
+          imp: T,
+          nota: v.m || '',
+          items: items
+        });
+
         log('Vendita Sospesa', cli.nome, `${eur(T)} - ${v.m || 'Sospeso'}`);
         save();
         cart = {};
@@ -179,7 +196,7 @@ function clienti(m,s){
    E('button',{class:'b',onclick:()=>{
     form('Nuovo Cliente',[{l:'Nome e Cognome',k:'n'},{l:'Telefono (opzionale)',k:'t'}],v=>{
      if(!v.n){alert('Nome obbligatorio');return false}
-     const c={id:nid('cli'),nome:v.n,tel:v.t||'',sospeso:0};
+     const c={id:nid('cli'),nome:v.n,tel:v.t||'',sospeso:0,storico:[]};
      S.clienti.push(c);log('Nuovo cliente','cliente',v.n);save();toast('Cliente creato');render();
     })
    }},'+ Nuovo Cliente')
@@ -200,6 +217,31 @@ function clienti(m,s){
     badgeClass = 'pos';
   }
 
+  const storicoList = c.storico || [];
+  const detailsEl = E('details', {style:'margin-top:10px'},
+    E('summary', {style:'cursor:pointer;font-weight:600;color:var(--ac)'}, `📜 Storico / Report movimenti (${storicoList.length})`),
+    E('div', {class:'storico-list'},
+      !storicoList.length ? E('div',{class:'mu sm',style:'padding:6px 0'},'Nessun movimento registrato per questo cliente.') :
+      [...storicoList].reverse().map(st => {
+        const isDebito = st.tipo === 'debito_manuale' || st.tipo === 'sospeso_cassa';
+        const tipoLabel = st.tipo === 'debito_manuale' ? '➕ Debito Manuale' :
+                          st.tipo === 'sospeso_cassa' ? '🛒 Vendita Sospesa (Cassa)' : '− Incasso Saldo';
+        const signClass = isDebito ? 'neg' : 'pos';
+        const signSymbol = isDebito ? '+' : '−';
+        
+        return E('div', {class:'storico-item'},
+          E('div', {class:'row', style:'border:0;padding:0'},
+            E('b', {}, tipoLabel),
+            E('b', {class: signClass}, `${signSymbol} ${eur(st.imp)}`)
+          ),
+          E('div', {class:'mu sm'}, `🗓️ ${dtFull(st.t)} · Turno: ${st.sNum||'Nessuno'} · Op: ${st.opn||'–'}`),
+          st.items && st.items.length ? E('div', {class:'sm'}, `Prodotti: ${st.items.map(i=>i.q+'× '+i.n).join(', ')}`) : null,
+          st.nota ? E('div', {class:'sm'}, `Nota: ${st.nota}`) : null
+        );
+      })
+    )
+  );
+
   m.append(E('div',{class:'cd'},
    E('div',{class:'row',style:'border:0'},
     E('div',{},E('b',{},c.nome),c.tel?E('small',{class:'mu',style:'display:block'},c.tel):null),
@@ -207,9 +249,29 @@ function clienti(m,s){
    ),
    E('div',{class:'f',style:'margin-top:8px'},
     E('button',{class:'b g s',onclick:()=>{
-     form(`Aggiungi Debito a ${c.nome}`,[{l:'Importo (€)',k:'i',m:'decimal'},{l:'Causale / Note',k:'m'}],v=>{
-      const imp=par(v.i);if(imp<=0){alert('Importo non valido');return false}
-      c.sospeso=(c.sospeso||0)+imp;log('Aggiunto debito',c.nome,`${eur(imp)} - ${v.m||'Sospeso'}`);save();toast('Debito registrato');render();
+     form(`Aggiungi Debito a ${c.nome}`,[
+       {l:'Importo (€)',k:'i',m:'decimal'},
+       {l:'Causale / Note (OBBLIGATORIA)',k:'m'}
+     ],v=>{
+      const imp=par(v.i);
+      if(imp<=0){alert('Importo non valido');return false}
+      if(!v.m || !v.m.trim()){
+        alert('errore, inserire la nota');
+        return false;
+      }
+      const activeShift = cur();
+      c.sospeso=(c.sospeso||0)+imp;
+      c.storico = c.storico || [];
+      c.storico.push({
+        id: nid('st'),
+        t: Date.now(),
+        sNum: activeShift ? tn(activeShift.id) : 'Nessuno',
+        opn: me.nome,
+        tipo: 'debito_manuale',
+        imp: imp,
+        nota: v.m.trim()
+      });
+      log('Aggiunto debito',c.nome,`${eur(imp)} - ${v.m.trim()}`);save();toast('Debito registrato');render();
      })
     }},'+ Debito'),
     E('button',{class:'b g s',onclick:()=>{
@@ -225,6 +287,16 @@ function clienti(m,s){
       }
       const imp=par(v.i);if(imp<=0){alert('Importo non valido');return false}
       c.sospeso=(c.sospeso||0)-imp;
+      c.storico = c.storico || [];
+      c.storico.push({
+        id: nid('st'),
+        t: Date.now(),
+        sNum: tn(activeShift.id),
+        opn: me.nome,
+        tipo: 'incasso_saldo',
+        imp: imp,
+        nota: v.m ? v.m.trim() : 'Pagamento / Saldo'
+      });
       S.mov.push({
         id: nid('m'),
         s: activeShift.id,
@@ -243,7 +315,8 @@ function clienti(m,s){
       S.clienti=S.clienti.filter(x=>x!==c);log('Cliente eliminato','cliente',c.nome);save();toast('Cliente eliminato');render();
      }
     }},'Elimina'):null
-   )
+   ),
+   detailsEl
   ))
  });
 }
@@ -396,6 +469,4 @@ boot();
 </script>
 </body>
 </html>
-</script>
-</body>
-</html>
+
