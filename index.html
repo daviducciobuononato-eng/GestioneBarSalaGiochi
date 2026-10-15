@@ -102,7 +102,7 @@ function vendita(m,s){
     E('button',{class:'b g',onclick:()=>{cart={};render()}},'Svuota'),
     E('button',{class:'b g',onclick:()=>{
       const sortedClients = [...S.clienti.filter(x => x.tipo !== 'bet')].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
-      const opts = [['NEW', '➕ CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
+      const opts = [['NEW', 'CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
       form('Segna a Sospeso', [
         {l:'Seleziona Cliente', k:'c', o: opts},
         {l:'Nome nuovo cliente (se stai creando un nuovo cliente)', k:'new_name'},
@@ -181,7 +181,7 @@ function render(){clearTimeout(idle);const a=$('#app');a.replaceChildren();
    ['v','Cassa'],
    ['t','Turno'],
    ['c','Clienti'],
-   isBetUser()&&['k','🎯 Registro Scommesse'],
+   isBetUser()&&['k','Registro Scommesse'],
    can('storico')&&['s','Storico'],
    can('catalogo')&&['a','Gestione']
  ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))}
@@ -242,13 +242,13 @@ function clienti(m,s){
 
   const storicoList = c.storico || [];
   const detailsEl = E('details', {style:'margin-top:10px'},
-    E('summary', {style:'cursor:pointer;font-weight:600;color:var(--ac)'}, `📜 Storico / Report movimenti (${storicoList.length})`),
+    E('summary', {style:'cursor:pointer;font-weight:600;color:var(--ac)'}, `Storico / Report movimenti (${storicoList.length})`),
     E('div', {class:'storico-list'},
       !storicoList.length ? E('div',{class:'mu sm',style:'padding:6px 0'},'Nessun movimento registrato per questo cliente.') :
       [...storicoList].reverse().map(st => {
         const isDebito = st.tipo === 'debito_manuale' || st.tipo === 'sospeso_cassa';
-        const tipoLabel = st.tipo === 'debito_manuale' ? '➕ Debito Manuale' :
-                          st.tipo === 'sospeso_cassa' ? '🛒 Vendita Sospesa (Cassa)' : '− Incasso Saldo';
+        const tipoLabel = st.tipo === 'debito_manuale' ? 'Debito Manuale' :
+                          st.tipo === 'sospeso_cassa' ? 'Vendita Sospesa (Cassa)' : '− Incasso Saldo';
         const signClass = isDebito ? 'neg' : 'pos';
         const signSymbol = isDebito ? '+' : '−';
         
@@ -433,9 +433,9 @@ function scommesse(m) {
   if (!s) {
     m.append(
       E('div', {class:'cd'},
-        E('b', {}, '🎯 Nessun turno scommesse aperto'),
+        E('b', {}, 'Nessun turno scommesse aperto'),
         E('p', {class:'mu'}, 'Per inserire addebiti, incassi o vincite scommesse occorre prima aprire un turno scommesse separato con il relativo fondo cassa.'),
-        E('button', {class:'b', style:'margin-top:8px', onclick: apriBet}, '🚀 Apri Turno Scommesse e Imposta Fondo Cassa')
+        E('button', {class:'b', style:'margin-top:8px', onclick: apriBet}, 'Apri Turno Scommesse e Imposta Fondo Cassa')
       ),
       E('h3', {style:'margin-top:16px'}, 'Registro Movimenti Scommesse'),
       opsScommesse()
@@ -469,10 +469,10 @@ function scommesse(m) {
       )
     ),
     E('div', {class:'f'},
-      E('button', {class:'b', onclick: () => apriModalScommessa('debito')}, '➕ Nuovo Debito Scommessa'),
-      E('button', {class:'b g', onclick: () => apriModalScommessa('accredito')}, '🎁 Nuovo Accredito / Vincita'),
-      E('button', {class:'b g', onclick: () => apriModalScommessa('incasso')}, '💰 Incassa Debito Scommessa'),
-      E('button', {class:'b r', onclick: chiudiBet}, '🔒 Chiudi Cassa Scommesse')
+      E('button', {class:'b', onclick: () => apriModalScommessa('debito')}, 'Nuovo Debito Scommessa'),
+      E('button', {class:'b g', onclick: () => apriModalScommessa('accredito')}, 'Nuovo Accredito / Vincita'),
+      E('button', {class:'b g', onclick: () => apriModalScommessa('incasso')}, 'Incassa Debito Scommessa'),
+      E('button', {class:'b r', onclick: chiudiBet}, 'Chiudi Cassa Scommesse')
     ),
     E('h3', {style:'margin-top:16px'}, 'Registro Movimenti Scommesse'),
     opsScommesse()
@@ -488,7 +488,7 @@ function opsScommesse(){
   }
   list.forEach(x => {
     const isDeb = x.tipo === 'debito', isAcc = x.tipo === 'accredito';
-    const label = isDeb ? '➕ DEBITO SCOMMESSA' : isAcc ? '🎁 ACCREDITO / VINCITA' : '💰 INCASSO DEBITO';
+    const label = isDeb ? 'DEBITO SCOMMESSA' : isAcc ? 'ACCREDITO / VINCITA' : 'INCASSO DEBITO';
     const badgeClass = isDeb ? 'neg' : 'pos';
 
     container.append(E('div', {class:'cd'},
@@ -513,18 +513,18 @@ function apriModalScommessa(tipoOp) {
 
   const betClients = S.clienti.filter(x => x.tipo === 'bet');
   const sortedClients = [...betClients].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
-  const optsClients = [['NEW', '➕ CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
+  const optsClients = [['NEW', 'CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
   const causaliPreset = tipoOp === 'debito' ? [
     ['Scommessa Sportiva', 'Scommessa Sportiva'],
     ['Virtual', 'Virtual Games'],
     ['Slot / VLT', 'Slot / VLT'],
     ['Ricarica Conto Gioco', 'Ricarica Conto Gioco'],
-    ['MANUALE', '✍️ Altra causale manuale...']
+    ['MANUALE', 'Altra causale manuale...']
   ] : [
     ['Vincita Scommessa', 'Vincita Scommessa'],
     ['Bonus / Accredito', 'Bonus / Accredito'],
     ['Rimborso', 'Rimborso'],
-    ['MANUALE', '✍️ Altra causale manuale...']
+    ['MANUALE', 'Altra causale manuale...']
   ];
 
   const titolo = tipoOp === 'debito' ? 'Registra Debito Scommessa' : tipoOp === 'accredito' ? 'Registra Accredito / Vincita' : 'Incassa Debito Scommessa';
