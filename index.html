@@ -85,54 +85,6 @@ async function newUser(nome,ruolo,p){if(!nome||!/^\d{4,6}$/.test(p)){alert('Nome
  try{const a2=getAuth(initializeApp(firebaseConfig,'s'+Date.now())),email=nome.toLowerCase().replace(/[^a-z0-9]/g,'')+Math.floor(Math.random()*9e4+1e4)+'@bar.app',c=await createUserWithEmailAndPassword(a2,email,pw(p));await signOut(a2);S.users.push({id:c.user.uid,nome,ruolo,att:1,email});log('Nuovo utente','utente',`${nome} (${RN[ruolo]})`);save();render()}catch(e){alert('Errore: '+(e.code||e.message));return false}}
 function cambioPin(){form('Cambia il tuo PIN',[{l:'Nuovo PIN (4–6 cifre)',k:'p',m:'numeric'}],async v=>{if(!/^\d{4,6}$/.test(v.p)){alert('PIN di 4–6 cifre');return false}try{await updatePassword(auth.currentUser,pw(v.p));log('Cambio PIN','utente',me.nome);save();toast('PIN aggiornato')}catch(e){alert('Esci e rientra, poi riprova ('+(e.code||e.message)+')');return false}})}
 const cur=()=>S.ses.find(s=>!s.ch);
-function tot(s){
- const v=S.sales.filter(x=>x.s===s.id),m=S.mov.filter(x=>x.s===s.id),
- g=v.reduce((a,x)=>a+x.tot,0),
- cashSales=v.filter(x=>!x.sospesoCliente).reduce((a,x)=>a+x.tot,0),
- st=m.filter(x=>x.tipo==='storno').reduce((a,x)=>a+x.imp,0),
- en=m.filter(x=>x.tipo==='entrata').reduce((a,x)=>a+x.imp,0),
- us=m.filter(x=>x.tipo==='uscita').reduce((a,x)=>a+x.imp,0);
- return{g,st,net:g-st,en,us,teo:s.fondo+cashSales-st+en-us};
-}
-
-const done=(sale,pid)=>S.mov.filter(m=>m.rif===sale.id&&m.tipo==='storno').reduce((a,m)=>a+(m.items.find(i=>i.pid===pid)?.q||0),0);
-function modal(t,body,acts){const o=E('div',{class:'ov',onclick:e=>e.target===o&&o.remove()},E('div',{class:'md'},E('h3',{},t),body,E('div',{class:'ac'},acts.map(([l,f,c])=>E('button',{class:'b '+(c||''),onclick:async()=>{if(!f||await f()!==false)o.remove()}},l)))));document.body.append(o);return o}
-const fl=(l,i)=>E('div',{},E('label',{},l),i);
-function form(t,fs,ok,lab='Conferma'){const els={};const b=E('div',{},fs.map(f=>{
-  if (f.type === 'custom') return f.el;
-  const i=f.o?E('select',{},f.o.map(([v,n])=>E('option',{value:v},n))):E('input',{type:f.t||'text',inputmode:f.m,v:f.v??'',autocomplete:'off'});
-  if(f.o)i.value=f.v;
-  els[f.k]=i;
-  return fl(f.l,i);
-}));
-modal(t,b,[['Annulla',null,'g'],[lab,()=>{const v={};for(const k in els)v[k]=els[k].value.trim();return ok(v)}]])}
-function toast(m){msg=m;render()}
-function render(){clearTimeout(idle);const a=$('#app');a.replaceChildren();
- if(!me){a.append(login());return}
- idle=setTimeout(()=>{lock()},120000);
- const s=cur();
- a.append(E('header',{},E('b',{},'🍺 Bar & Scommesse',E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno aperto dal '+dt(s.ap):'Nessun turno aperto'}`)),E('button',{class:'b g s',onclick:cambioPin},'PIN'),E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')));
- const m=E('main');a.append(m);if(msg){m.append(E('div',{class:'cd pos'},msg));msg=''}
- const views = {v:vendita,t:turno,c:clienti,s:storico,a:admin,k:scommesse};
- (views[tab]||vendita)(m,s);
- a.append(E('nav',{},[
-   ['v','Cassa'],
-   ['t','Turno'],
-   ['c','Clienti'],
-   isBetUser()&&['k','Registro Scommesse'],
-   can('storico')&&['s','Storico'],
-   can('catalogo')&&['a','Gestione']
- ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))}
-['pointerdown','keydown'].forEach(e=>addEventListener(e,()=>{if(me){clearTimeout(idle);idle=setTimeout(()=>{lock()},120000)}}));
-
-function login(){
-  const d=E('div',{class:'pin'},E('h2',{},'🍺 Gestione Bar'));
-  if(needSetup){const n=E('input',{placeholder:'Il tuo nome'}),p=E('input',{type:'password',inputmode:'numeric',placeholder:'PIN 4–6 cifre',maxlength:6,style:'margin-top:8px'});d.append(E('p',{class:'mu'},'Prima configurazione: crea il Proprietario.'),n,p,E('div',{class:'neg',style:'min-height:22px'},msg),E('button',{class:'b',onclick:()=>/^\d{4,6}$/.test(p.value)&&n.value.trim()?setup(n.value.trim(),p.value):(msg='Nome e PIN 4–6 cifre',render())},'Crea e inizia'));msg='';return d}
-  if(!sel){d.append(E('div',{class:'mu'},'Chi sei?'),...S.users.filter(u=>u.att).map(u=>E('button',{class:'b g',style:'display:block;width:100%;margin:8px 0',onclick:()=>{sel=u;pin='';render()}},u.nome)),E('div',{class:'neg'},msg));msg='';return d}
-  d.append(E('b',{},sel.nome),E('div',{class:'dots'},'●'.repeat(pin.length) || '·'),E('div',{class:'neg',style:'min-height:22px'},msg));msg='';
-  const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return render()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';render()});return}else if(pin.length<6)pin+=k;render()}},k)));
-  d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';render()}},'← Cambia utente'));return d
-}
 
 function vendita(m,s){
  if(!s){m.append(E('div',{class:'cd'},E('b',{},'Nessun turno aperto'),E('p',{class:'mu'},'Solo Proprietario o Responsabile possono aprire il turno.'),can('fondo')&&E('button',{class:'b',onclick:apri},'Apri turno e imposta fondo cassa')));return}
@@ -145,7 +97,7 @@ function vendita(m,s){
   cd.append(E('div',{class:'row'},E('b',{},'TOTALE'),E('b',{},eur(T))),r,rs,E('div',{class:'ac'},
     E('button',{class:'b g',onclick:()=>{cart={};render()}},'Svuota'),
     E('button',{class:'b g',onclick:()=>{
-      const sortedClients = [...S.clienti].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
+      const sortedClients = [...S.clienti.filter(x => x.tipo !== 'bet')].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
       const opts = [['NEW', '➕ CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
       form('Segna a Sospeso', [
         {l:'Seleziona Cliente', k:'c', o: opts},
@@ -156,7 +108,7 @@ function vendita(m,s){
         let cli = null;
         if (v.c === 'NEW' || (!v.c && v.new_name)) {
           if (!v.new_name) { alert('Inserisci il nome del nuovo cliente.'); return false; }
-          cli = { id: nid('cli'), nome: v.new_name, tel: v.new_tel || '', sospeso: 0, storico: [] };
+          cli = { id: nid('cli'), nome: v.new_name, tel: v.new_tel || '', sospeso: 0, storico: [], tipo: 'bar' };
           S.clienti.push(cli);
           log('Nuovo cliente', 'cliente', v.new_name);
         } else if (v.c) {
@@ -191,6 +143,55 @@ function vendita(m,s){
     E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>x.id==i);return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);S.sales.push({id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null});log('Vendita','vendita '+vn(n),eur(T));save();cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
   ))}
  m.append(cd)}
+function tot(s){
+ const v=S.sales.filter(x=>x.s===s.id),m=S.mov.filter(x=>x.s===s.id),
+ g=v.reduce((a,x)=>a+x.tot,0),
+ cashSales=v.filter(x=>!x.sospesoCliente).reduce((a,x)=>a+x.tot,0),
+ st=m.filter(x=>x.tipo==='storno').reduce((a,x)=>a+x.imp,0),
+ en=m.filter(x=>x.tipo==='entrata').reduce((a,x)=>a+x.imp,0),
+ us=m.filter(x=>x.tipo==='uscita').reduce((a,x)=>a+x.imp,0);
+ return{g,st,net:g-st,en,us,teo:s.fondo+cashSales-st+en-us};
+}
+
+const done=(sale,pid)=>S.mov.filter(m=>m.rif===sale.id&&m.tipo==='storno').reduce((a,m)=>a+(m.items.find(i=>i.pid===pid)?.q||0),0);
+function modal(t,body,acts){const o=E('div',{class:'ov',onclick:e=>e.target===o&&o.remove()},E('div',{class:'md'},E('h3',{},t),body,E('div',{class:'ac'},acts.map(([l,f,c])=>E('button',{class:'b '+(c||''),onclick:async()=>{if(!f||await f()!==false)o.remove()}},l)))));document.body.append(o);return o}
+const fl=(l,i)=>E('div',{},E('label',{},l),i);
+function form(t,fs,ok,lab='Conferma'){const els={};const b=E('div',{},fs.map(f=>{
+  if (f.type === 'custom') return f.el;
+  const i=f.o?E('select',{},f.o.map(([v,n])=>E('option',{value:v},n))):E('input',{type:f.t||'text',inputmode:f.m,v:f.v??'',autocomplete:'off'});
+  if(f.o)i.value=f.v;
+  els[f.k]=i;
+  return fl(f.l,i);
+}));
+modal(t,b,[['Annulla',null,'g'],[lab,()=>{const v={};for(const k in els)v[k]=els[k].value.trim();return ok(v)}]])}
+function toast(m){msg=m;render()}
+function render(){clearTimeout(idle);const a=$('#app');a.replaceChildren();
+ if(!me){a.append(login());return}
+ idle=setTimeout(()=>{lock()},120000);
+ const s=cur();
+ a.append(E('header',{},E('b',{},'🍺 Bar & Scommesse',E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno aperto dal '+dt(s.ap):'Nessun turno aperto'}`)),E('button',{class:'b g s',onclick:cambioPin},'PIN'),E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')));
+ const m=E('main');a.append(m);if(msg){m.append(E('div',{class:'cd pos'},msg));msg=''}
+ const views = {v:vendita,t:turno,c:clienti,s:storico,a:admin,k:scommesse};
+ (views[tab]||vendita)(m,s);
+ a.append(E('nav',{},[
+   ['v','Cassa'],
+   ['t','Turno'],
+   ['c','Clienti'],
+   isBetUser()&&['k','🎯 Scommesse'],
+   can('storico')&&['s','Storico'],
+   can('catalogo')&&['a','Gestione']
+ ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))}
+['pointerdown','keydown'].forEach(e=>addEventListener(e,()=>{if(me){clearTimeout(idle);idle=setTimeout(()=>{lock()},120000)}}));
+
+function login(){
+  const d=E('div',{class:'pin'},E('h2',{},'🍺 Gestione Bar'));
+  if(needSetup){const n=E('input',{placeholder:'Il tuo nome'}),p=E('input',{type:'password',inputmode:'numeric',placeholder:'PIN 4–6 cifre',maxlength:6,style:'margin-top:8px'});d.append(E('p',{class:'mu'},'Prima configurazione: crea il Proprietario.'),n,p,E('div',{class:'neg',style:'min-height:22px'},msg),E('button',{class:'b',onclick:()=>/^\d{4,6}$/.test(p.value)&&n.value.trim()?setup(n.value.trim(),p.value):(msg='Nome e PIN 4–6 cifre',render())},'Crea e inizia'));msg='';return d}
+  if(!sel){d.append(E('div',{class:'mu'},'Chi sei?'),...S.users.filter(u=>u.att).map(u=>E('button',{class:'b g',style:'display:block;width:100%;margin:8px 0',onclick:()=>{sel=u;pin='';render()}},u.nome)),E('div',{class:'neg'},msg));msg='';return d}
+  d.append(E('b',{},sel.nome),E('div',{class:'dots'},'●'.repeat(pin.length) || '·'),E('div',{class:'neg',style:'min-height:22px'},msg));msg='';
+  const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return render()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';render()});return}else if(pin.length<6)pin+=k;render()}},k)));
+  d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';render()}},'← Cambia utente'));return d
+}
+
 function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'decimal',v:'100,00'}],v=>{const f=par(v.f);if(f<0)return false;const s={id:nid('t'),da:me.id,dan:me.nome,ap:Date.now(),fondo:f,ch:null};S.ses.push(s);log('Apertura turno','turno '+tn(s.id),'Fondo '+eur(f));save();toast('Turno aperto con fondo '+eur(f))})}
 function turno(m,s){
  if(!s){m.append(E('div',{class:'cd mu'},'Nessun turno aperto.',can('fondo')&&E('div',{},E('button',{class:'b',style:'margin-top:8px',onclick:apri},'Apri turno'))));return}
@@ -199,8 +200,9 @@ function turno(m,s){
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
 
 function clienti(m,s){
- const totDebiti=S.clienti.filter(x=>(x.sospeso||0)>0).reduce((a,x)=>a+(x.sospeso||0),0);
- const totCrediti=S.clienti.filter(x=>(x.sospeso||0)<0).reduce((a,x)=>a+Math.abs(x.sospeso||0),0);
+ const barClients = S.clienti.filter(x => x.tipo !== 'bet');
+ const totDebiti=barClients.filter(x=>(x.sospeso||0)>0).reduce((a,x)=>a+(x.sospeso||0),0);
+ const totCrediti=barClients.filter(x=>(x.sospeso||0)<0).reduce((a,x)=>a+Math.abs(x.sospeso||0),0);
  m.append(
   E('div',{class:'k',style:'margin-bottom:12px'},
    E('div',{class:'w'},
@@ -213,15 +215,15 @@ function clienti(m,s){
    E('button',{class:'b',onclick:()=>{
     form('Nuovo Cliente Bar',[{l:'Nome e Cognome',k:'n'},{l:'Telefono (opzionale)',k:'t'}],v=>{
      if(!v.n){alert('Nome obbligatorio');return false}
-     const c={id:nid('cli'),nome:v.n,tel:v.t||'',sospeso:0,storico:[]};
+     const c={id:nid('cli'),nome:v.n,tel:v.t||'',sospeso:0,storico:[],tipo:'bar'};
      S.clienti.push(c);log('Nuovo cliente','cliente',v.n);save();toast('Cliente creato');render();
     })
    }},'+ Nuovo Cliente')
   ),
   E('h3',{},'Registro Clienti Bar & Debiti')
  );
- if(!S.clienti.length){m.append(E('div',{class:'mu'},'Nessun cliente registrato.'));return}
- const list=[...S.clienti].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
+ if(!barClients.length){m.append(E('div',{class:'cd mu'},'Nessun cliente Bar registrato.'));return}
+ const list=[...barClients].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
  list.forEach(c=>{
   const sosp=c.sospeso||0;
   let labelText = 'Saldo: 0,00 €';
@@ -358,14 +360,14 @@ function getBetStats(){
 
 function scommesse(m, s) {
   if (!isBetUser()) {
-    m.append(E('div', {class:'cd neg'}, '🔒 Accesso Riservato: questa sezione è accessibile solo a Danilo, Attilio e Michele.'));
+    m.append(E('div', {class:'cd neg'}, '🔒 Accesso Riservato: questa sezione è accessibile solo a Michele, Danilo ed Attilio.'));
     return;
   }
   const stats = getBetStats();
   m.append(
     E('div', {class:'k', style:'margin-bottom:12px'},
       E('div', {class:'w', style:'background:#2b7a4b'},
-        E('small', {}, 'CASSA SCOMMESSE'),
+        E('small', {}, 'CASSA SCOMMESSE SEPARATA'),
         E('b', {style:'font-size:26px'}, eur(stats.cassaBet))
       ),
       E('div', {},
@@ -413,7 +415,8 @@ function opsScommesse(){
 }
 
 function apriModalScommessa(tipoOp) {
-  const sortedClients = [...S.clienti].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
+  const betClients = S.clienti.filter(x => x.tipo === 'bet');
+  const sortedClients = [...betClients].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
   const optsClients = [['NEW', '➕ CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
   const causaliPreset = tipoOp === 'debito' ? [
     ['Scommessa Sportiva', 'Scommessa Sportiva'],
@@ -455,10 +458,10 @@ function apriModalScommessa(tipoOp) {
       if (selectClient.value === 'NEW' || (!selectClient.value && inputNewClient.value.trim())) {
         if (!inputNewClient.value.trim()) { alert('Inserisci il nome del nuovo cliente.'); return false; }
         cliName = inputNewClient.value.trim();
-        const newC = { id: nid('cli'), nome: cliName, tel: '', sospeso: 0, storico: [] };
+        const newC = { id: nid('cli'), nome: cliName, tel: '', sospeso: 0, storico: [], tipo: 'bet' };
         S.clienti.push(newC);
       } else {
-        const found = S.clienti.find(x => String(x.id) === String(selectClient.value));
+        const found = betClients.find(x => String(x.id) === String(selectClient.value));
         if (!found) { alert('Seleziona un cliente.'); return false; }
         cliName = found.nome;
       }
