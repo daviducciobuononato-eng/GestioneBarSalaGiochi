@@ -119,7 +119,7 @@ function render(){clearTimeout(idle);const a=$('#app');a.replaceChildren();
    ['v','Cassa'],
    ['t','Turno'],
    ['c','Clienti'],
-   isBetUser()&&['k','🎯 Scommesse'],
+   isBetUser()&&['k','Registro Scommesse'],
    can('storico')&&['s','Storico'],
    can('catalogo')&&['a','Gestione']
  ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))}
@@ -358,14 +358,14 @@ function getBetStats(){
 
 function scommesse(m, s) {
   if (!isBetUser()) {
-    m.append(E('div', {class:'cd neg'}, '🔒 Accesso Riservato: questa sezione è accessibile solo a Michele, Danilo ed Attilio.'));
+    m.append(E('div', {class:'cd neg'}, '🔒 Accesso Riservato: questa sezione è accessibile solo a Danilo, Attilio e Michele.'));
     return;
   }
   const stats = getBetStats();
   m.append(
     E('div', {class:'k', style:'margin-bottom:12px'},
       E('div', {class:'w', style:'background:#2b7a4b'},
-        E('small', {}, 'CASSA SCOMMESSE SEPARATA'),
+        E('small', {}, 'CASSA SCOMMESSE'),
         E('b', {style:'font-size:26px'}, eur(stats.cassaBet))
       ),
       E('div', {},
