@@ -202,7 +202,6 @@ function turno(m,s){
  const t=tot(s);m.append(E('div',{class:'k'},[['Fondo iniziale',t.g*0+s.fondo],['Vendite lorde',t.g],['Storni / correzioni',-t.st],['Incasso netto',t.net],['Entrate manuali',t.en],['Uscite manuali',-t.us]].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
  if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:()=>fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
-
 function clienti(m,s){
  const barClients = S.clienti.filter(x => x.tipo !== 'bet');
  const totDebiti=barClients.filter(x=>(x.sospeso||0)>0).reduce((a,x)=>a+(x.sospeso||0),0);
@@ -353,7 +352,7 @@ function totBet(s){
     if (m.tipo === 'debito') {
       deb += m.imp;
     } else if (m.tipo === 'accredito') {
-      acc += m.imp; // Accrediti/vincite NON modificano la cassa teorica
+      acc += m.imp;
     } else if (m.tipo === 'incasso_debito') {
       inc += m.imp;
       if (!m.daniloNoCassa) cassaIn += m.imp;
@@ -375,15 +374,22 @@ function getBetStatsShift(s){
 }
 
 function getBetClientStats(clientName){
+  const activeShift = curBet();
   const movs = (S.bet_mov || []).filter(x => x.cliente && x.cliente.trim().toLowerCase() === clientName.trim().toLowerCase());
-  let deb = 0, inc = 0, acc = 0;
+  let deb = 0, inc = 0, acc = 0, currAcc = 0;
   movs.forEach(m => {
     if (m.tipo === 'debito') deb += m.imp;
     else if (m.tipo === 'incasso_debito') inc += m.imp;
-    else if (m.tipo === 'accredito') acc += m.imp;
+    else if (m.tipo === 'accredito') {
+      acc += m.imp;
+      if (activeShift && m.s === activeShift.id) {
+        currAcc += m.imp;
+      }
+    }
   });
-  const debitoResiduo = Math.max(0, deb - inc);
-  return { debitoResiduo, totAccrediti: acc };
+  const saldoNetto = deb - inc - acc;
+  const debitoResiduo = Math.max(0, saldoNetto);
+  return { saldoNetto, debitoResiduo, totAccrediti: currAcc };
 }
 
 function apriBet(){
@@ -456,7 +462,6 @@ function scommesse(m) {
   }
 
   const t = totBet(s);
-
   m.append(
     E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
       E('div', {class:'row', style:'border:0;padding:0'},
@@ -498,13 +503,16 @@ function scommesse(m) {
     const list = [...betClients].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
     list.forEach(c => {
       const st = getBetClientStats(c.nome);
+      let saldoText = st.saldoNetto > 0 ? `Debito Residuo: ${eur(st.saldoNetto)}` : st.saldoNetto < 0 ? `Credito: +${eur(Math.abs(st.saldoNetto))}` : `Debito Residuo: 0,00 €`;
+      let saldoClass = st.saldoNetto > 0 ? 'neg' : st.saldoNetto < 0 ? 'pos' : 'mu';
+
       m.append(
         E('div', {class:'cd'},
           E('div', {class:'row', style:'border:0'},
             E('div', {}, E('b', {style:'font-size:16px'}, c.nome)),
             E('div', {style:'text-align:right'},
-              E('div', {class: st.debitoResiduo > 0 ? 'neg' : 'mu', style:'font-weight:bold;font-size:15px'}, `Debito Residuo: ${eur(st.debitoResiduo)}`),
-              E('div', {class: st.totAccrediti > 0 ? 'pos' : 'mu', style:'font-size:13px'}, `Accrediti/Vincite: +${eur(st.totAccrediti)}`)
+              E('div', {class: saldoClass, style:'font-weight:bold;font-size:15px'}, saldoText),
+              E('div', {class: st.totAccrediti > 0 ? 'pos' : 'mu', style:'font-size:13px'}, `Accrediti/Vincite Turno: +${eur(st.totAccrediti)}`)
             )
           ),
           E('div', {class:'f', style:'margin-top:8px'},
@@ -522,6 +530,7 @@ function scommesse(m) {
     opsScommesse()
   );
 }
+
 function opsScommesse(){
   const list = [...(S.bet_mov || [])].sort((a,b) => b.t - a.t);
   const container = E('div', {});
@@ -793,4 +802,3 @@ boot();
 </script>
 </body>
 </html>
-
