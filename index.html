@@ -285,6 +285,7 @@ function vendita(m,s){
           id: nid('st'),
           t: Date.now(),
           sNum: tn(s.id),
+          sId: s.id,
           opn: me.nome,
           tipo: 'sospeso_cassa',
           imp: T,
@@ -307,12 +308,37 @@ function tot(s){
  const v=S.sales.filter(x=>x.s===s.id),m=S.mov.filter(x=>x.s===s.id),
  g=v.reduce((a,x)=>a+x.tot,0),
  cashSales=v.filter(x=>!x.sospesoCliente).reduce((a,x)=>a+x.tot,0),
+ sospSales=v.filter(x=>x.sospesoCliente).reduce((a,x)=>a+x.tot,0),
  st=m.filter(x=>x.tipo==='storno').reduce((a,x)=>a+x.imp,0),
  isInc = x => x.isIncassoDebito || (x.motivo && x.motivo.toLowerCase().includes('incasso')),
  en=m.filter(x=>x.tipo==='entrata' && !isInc(x)).reduce((a,x)=>a+x.imp,0),
  incDeb=m.filter(x=>x.tipo==='entrata' && isInc(x)).reduce((a,x)=>a+x.imp,0),
  us=m.filter(x=>x.tipo==='uscita').reduce((a,x)=>a+x.imp,0);
- return{g,st,net:g-st,en,incDeb,us,teo:s.fondo+cashSales-st+en+incDeb-us};
+
+ let debMan = 0;
+ (S.clienti||[]).forEach(c => {
+   (c.storico||[]).forEach(stItem => {
+     if (stItem.tipo === 'debito_manuale' && (stItem.sNum === tn(s.id) || stItem.sId === s.id)) {
+       debMan += stItem.imp;
+     }
+   });
+ });
+
+ const totDebitiCreati = sospSales + debMan;
+
+ return {
+   g,
+   cashSales,
+   sospSales,
+   debMan,
+   totDebitiCreati,
+   st,
+   net: g - st,
+   en,
+   incDeb,
+   us,
+   teo: s.fondo + cashSales - st + en + incDeb - us
+ };
 }
 
 const done=(sale,pid)=>S.mov.filter(m=>m.rif===sale.id&&m.tipo==='storno').reduce((a,m)=>a+(m.items.find(i=>i.pid===pid)?.q||0),0);
@@ -468,6 +494,7 @@ function clienti(m,s){
         id: nid('st'),
         t: Date.now(),
         sNum: activeShift ? tn(activeShift.id) : 'Nessuno',
+        sId: activeShift ? activeShift.id : null,
         opn: me.nome,
         tipo: 'debito_manuale',
         imp: imp,
@@ -494,6 +521,7 @@ function clienti(m,s){
         id: nid('st'),
         t: Date.now(),
         sNum: tn(activeShift.id),
+        sId: activeShift.id,
         opn: me.nome,
         tipo: 'incasso_saldo',
         imp: imp,
@@ -919,8 +947,21 @@ async function deleteAllSes(){
 
 async function mostraOperazioniTurno(s){
   await loadSes(s.id);
-  const opsContainer = E('div', {style:'max-height:60vh;overflow-y:auto;padding-right:4px'}, ops(s.id, {ro:1}));
-  modal(`Operazioni Turno Bar ${tn(s.id)}`, opsContainer, [['Chiudi', null, 'g']]);
+  const t = tot(s);
+  const rep = E('div', {class:'cd', style:'margin-bottom:12px;background:var(--cd);border:1px solid var(--ln)'},
+    E('b', {style:'display:block;margin-bottom:8px'}, `📊 Report Riepilogativo Turno Bar ${tn(s.id)}`),
+    E('div', {class:'k', style:'grid-template-columns:1fr 1fr;gap:6px'},
+      E('div', {}, E('small', {}, 'Fondo Iniziale'), E('b', {}, eur(s.fondo))),
+      E('div', {}, E('small', {}, 'Incasso Netto Vendite'), E('b', {}, eur(t.net))),
+      E('div', {}, E('small', {}, 'Debiti Creati (Sospesi)'), E('b', {class:'neg'}, eur(t.totDebitiCreati))),
+      E('div', {}, E('small', {}, 'Debiti Saldati / Incassati'), E('b', {class:'pos'}, eur(t.incDeb))),
+      E('div', {}, E('small', {}, 'Entrate Manuali'), E('b', {}, eur(t.en))),
+      E('div', {}, E('small', {}, 'Uscite Manuali'), E('b', {class:'neg'}, eur(-t.us))),
+      E('div', {class:'w'}, E('small', {}, 'CONTANTE TEORICO IN CASSA'), E('b', {style:'font-size:22px'}, eur(t.teo)))
+    )
+  );
+  const opsContainer = E('div', {style:'max-height:60vh;overflow-y:auto;padding-right:4px'}, rep, ops(s.id, {ro:1}));
+  modal(`Operazioni e Report Turno Bar ${tn(s.id)}`, opsContainer, [['Chiudi', null, 'g']]);
 }
 
 function storico(m){
@@ -928,7 +969,7 @@ function storico(m){
  m.append(
   E('div',{class:'f',style:'align-items:center;justify-content:space-between;margin-bottom:8px'},
    E('h3',{style:'margin:0'},'Turni Bar'),
-   (can('storico') || me?.ruolo === 'prop') && S.ses.length ? E('button',{class:'b r s',onclick:deleteAllSes},'🗑️ Elimina tutti i turni bar') : null
+   (can('storico') || me?.ruolo === 'prop') && S.ses.length ? E('button',{class:'r s b',onclick:deleteAllSes},'🗑️ Elimina tutti i turni bar') : null
   ),
   ...[...S.ses].reverse().map(s=>{
    const t=tot(s);
@@ -937,11 +978,12 @@ function storico(m){
      E('b',{},`Turno Bar ${tn(s.id)}${s.ch?'':' (aperto)'}`),
      E('span',{class:'mu sm'},dt(s.ap))
     ),
-    E('div',{class:'sm'},`Fondo ${eur(s.fondo)} · Incasso netto ${eur(t.net)} · Teorico ${eur(t.teo)}`+(s.ch?` · Contato ${eur(s.reale)} · `:'')),
-    s.ch&&E('b',{class:s.diff<0?'neg':s.diff>0?'pos':''},'Differenza '+eur(s.diff)),
-    E('div',{class:'sm mu'},`Aperto da ${s.dan}${s.ch?' · chiuso da '+s.chn+' il '+dt(s.ch)+(s.nota?' · '+s.nota:''):''}`),
+    E('div',{class:'sm'},`Fondo ${eur(s.fondo)} · Netto ${eur(t.net)} · Teorico ${eur(t.teo)}`+(s.ch?` · Contato ${eur(s.reale)}`:'')),
+    E('div',{class:'sm',style:'margin-top:2px;color:var(--mu)'},`Debiti creati nel turno: ${eur(t.totDebitiCreati)} · Debiti incassati: ${eur(t.incDeb)}`),
+    s.ch&&E('b',{class:s.diff<0?'neg':s.diff>0?'pos':'',style:'display:block;margin-top:2px'},'Differenza '+eur(s.diff)),
+    E('div',{class:'sm mu',style:'margin-top:2px'},`Aperto da ${s.dan}${s.ch?' · chiuso da '+s.chn+' il '+dt(s.ch)+(s.nota?' · '+s.nota:''):''}`),
     E('div',{class:'f',style:'margin-top:8px'},
-     E('button',{class:'b g s',onclick:()=>mostraOperazioniTurno(s)},'Vedi operazioni'),
+     E('button',{class:'b g s',onclick:()=>mostraOperazioniTurno(s)},'Vedi operazioni & report'),
      (can('storico') || me?.ruolo === 'prop') ? E('button',{class:'b r s',onclick:()=>deleteSes(s.id)},'🗑️ Elimina') : null
     )
    )
@@ -997,5 +1039,6 @@ boot();
 </script>
 </body>
 </html>
+
 
 
