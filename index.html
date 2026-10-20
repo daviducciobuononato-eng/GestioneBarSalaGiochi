@@ -401,12 +401,13 @@ function turno(m,s){
  const t=tot(s);
  m.append(E('div',{class:'k'},[
    ['Fondo iniziale',s.fondo],
-   ['Vendite lorde (solo informativo)',t.g],
-   ['Storni / correzioni',-t.st],
    ['Incasso netto',t.net],
-   ['Incassi debiti (solo informativo)',t.incDeb],
+   ['Storni / correzioni',-t.st],
+   ['Vendite lorde (solo informativo)',t.g],
    ['Entrate manuali',t.en],
-   ['Uscite manuali',-t.us]
+   ['Uscite manuali',-t.us],
+   ['Incassi debiti (solo informativo)',t.incDeb],
+   ['Debiti (solo informativo)',t.totDebitiCreati]
  ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
  if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
