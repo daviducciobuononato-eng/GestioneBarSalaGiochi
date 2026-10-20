@@ -40,7 +40,7 @@ import {firebaseConfig} from './firebase-config.js';
 
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
 const $=s=>document.querySelector(s),
-E=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);else if(k==='v')e.value=a[k];else e.setAttribute(k,a[k])}c.flat().forEach(x=>x!=null&&e.append(x.nodeType?x:document.createTextNode(x)));return e},
+E=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);else if(k==='v')e.value=a[k];else e.setAttribute(k,a[k])}c.flat().forEach(x=>x!=null&&x!==false&&e.append(x.nodeType?x:document.createTextNode(x)));return e},
 eur=c=>(c<0?'−':'')+(Math.abs(c)/100).toFixed(2).replace('.',',')+' €',
 par=s=>Math.round(parseFloat(String(s).replace(',','.'))*100)||0,
 dt=t=>new Date(t).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}),
@@ -825,7 +825,8 @@ function ops(sid,f){const L=[...S.sales.filter(x=>x.s===sid).map(x=>({...x,k:'ve
  if(!L.length)w.append(E('div',{class:'mu'},'Nessuna operazione.'));
  L.forEach(x=>{const sale=x.k==='vendita',stt=sale?S.mov.some(m=>m.rif===x.id)?(x.items.every(i=>done(x,i.pid)>=i.q)?' · STORNATA':' · storno parziale'):'':'';
   const sg=x.k==='storno'||x.k==='uscita'?-1:1,op=S.users.find(u=>u.id===x.op)?.nome||x.opn||'';
-  w.append(E('div',{class:'cd'},E('div',{class:'row',style:'border:0'},E('b',{},sale?`Vendita ${vn(x.id)}${stt}${x.sospesoCliente?' (SOSPESO: '+x.sospesoCliente+')':''}`:x.k==='storno'?`Storno di ${vn(x.rif)}`:x.k==='entrata'?'Entrata manuale':'Uscita manuale'),E('b',{class:sg<0?'neg':'pos'},eur(sg*(sale?x.tot:x.imp)))),E('div',{class:'sm mu'},`${dt(x.t)} · ${op}${x.motivo?' · Motivo: '+x.motivo:''}`),x.items&&E('div',{class:'sm'},x.items.map(i=>i.q+'× '+i.n).join(', ')),sale&&!f.ro&&cur()?.id===sid&&E('button',{class:'b g s',style:'margin-top:6px',onclick:()=>storno(x)},'Storna / correggi')))});return w}
+  const labelEntrata = x.motivo && x.motivo.toLowerCase().includes('incasso') ? 'Debito incassato' : 'Entrata manuale';
+  w.append(E('div',{class:'cd'},E('div',{class:'row',style:'border:0'},E('b',{},sale?`Vendita ${vn(x.id)}${stt}${x.sospesoCliente?' (SOSPESO: '+x.sospesoCliente+')':''}`:x.k==='storno'?`Storno di ${vn(x.rif)}`:x.k==='entrata'?labelEntrata:'Uscita manuale'),E('b',{class:sg<0?'neg':'pos'},eur(sg*(sale?x.tot:x.imp)))),E('div',{class:'sm mu'},`${dt(x.t)} · ${op}${x.motivo?' · Motivo: '+x.motivo:''}`),x.items&&E('div',{class:'sm'},x.items.map(i=>i.q+'× '+i.n).join(', ')),sale&&!f.ro&&cur()?.id===sid&&E('button',{class:'b g s',style:'margin-top:6px',onclick:()=>storno(x)},'Storna / correggi')))});return w}
 
 function storno(sale){const q={};sale.items.forEach(i=>q[i.pid]=0);const body=E('div',{}),mot=E('select',{},['Errore di battitura','Prodotto sbagliato','Cliente ha cambiato idea','Prodotto non disponibile','Altro'].map(x=>E('option',{},x))),note=E('input',{placeholder:'Dettaglio (obbligatorio se “Altro”)'}),tt=E('b',{});
  const upd=()=>tt.textContent='Importo da stornare: '+eur(sale.items.reduce((a,i)=>a+q[i.pid]*i.p,0));
@@ -983,4 +984,5 @@ boot();
 </script>
 </body>
 </html>
+
 
