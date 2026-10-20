@@ -30,6 +30,7 @@ input,select,textarea{font:inherit;padding:10px;border:1px solid var(--ln);borde
 .storico-item{padding:8px 0;border-bottom:1px dashed var(--ln);font-size:13px}
 .storico-item:last-child{border-bottom:0}
 .tag-danilo{background:#e27a4c;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:bold;display:inline-block;margin-left:4px}
+.test-banner{background:#d9381e;color:#fff;text-align:center;padding:6px 10px;font-size:13px;font-weight:bold;letter-spacing:0.5px}
 </style></head><body><div id="app"></div>
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
@@ -38,7 +39,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,co
 import {firebaseConfig} from './firebase-config.js';
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
 const $=s=>document.querySelector(s),
-E=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);else if(k==='v')e.value=a[k];else e.setAttribute(k,a[k])}c.flat().forEach(x=>x!=null&&e.append(x.nodeType?x:document.createTextNode(x)));return e},
+E=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);else if(k==='v')e.value=a[k];else e.setAttribute(k,a[k])}c.flat().forEach(x=>x!=null&&e.append(x.nodeType?x:documentcreateTextNode(x)));return e},
 eur=c=>(c<0?'−':'')+(Math.abs(c)/100).toFixed(2).replace('.',',')+' €',
 par=s=>Math.round(parseFloat(String(s).replace(',','.'))*100)||0,
 dt=t=>new Date(t).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}),
@@ -47,46 +48,199 @@ RN={prop:'Proprietario',resp:'Responsabile',dip:'Dipendente'},
 PM={fondo:['prop','resp'],chiudi:['prop','resp'],catalogo:['prop','resp'],storico:['prop','resp'],utenti:['prop'],clienti:['prop','resp','dip']},
 X0=0;
 let S={users:[],cats:[],prods:[],ses:[],sales:[],mov:[],audit:[],clienti:[],bet_mov:[],bet_ses:[]},me=null,tab='v',cat=null,cart={},pin='',idle,msg='',F={s:'',o:'',t:'',p:'',d:''};
+let isTestMode=false;
+
 const can=a=>me&&PM[a].includes(me.ruolo);
-const isBetUser=()=>me&&['michele','danilo','attilio'].some(n=>me.nome.trim().toLowerCase()===n);
+const isDavide=()=>me&&(me.nome.trim().toLowerCase()==='davide'||me.ruolo==='prop');
+const isBetUser=()=>me&&['michele','danilo','attilio','davide'].some(n=>me.nome.trim().toLowerCase()===n);
 const pw=p=>p+'-Bar#26';
-const COL={users:'profili',cats:'cats',prods:'prods',ses:'ses',sales:'sales',mov:'mov',audit:'audit',clienti:'clienti',bet_mov:'bet_mov',bet_ses:'bet_ses'},cmp=(a,b)=>(a.id>b.id)-(a.id<b.id);
+
+const getCOL=()=>({
+  users:'profili',
+  cats:'cats',
+  prods:'prods',
+  ses: isTestMode ? 'test_ses' : 'ses',
+  sales: isTestMode ? 'test_sales' : 'sales',
+  mov: isTestMode ? 'test_mov' : 'mov',
+  audit: isTestMode ? 'test_audit' : 'audit',
+  clienti: isTestMode ? 'test_clienti' : 'clienti',
+  bet_mov: isTestMode ? 'test_bet_mov' : 'bet_mov',
+  bet_ses: isTestMode ? 'test_bet_ses' : 'bet_ses'
+});
+const cmp=(a,b)=>(a.id>b.id)-(a.id<b.id);
+
 let last={},unsub=[],unsubSM=[],curId=null,part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}},LD=new Set(),sel=null,needSetup=false,busy=false;
 const err=e=>{msg='Errore o operazione non consentita: '+(e.code||e.message);render()};
 const stamp=(k,d)=>(last[k]||(last[k]={}))[String(d.id)]=JSON.stringify(d);
-function save(){for(const k in COL){const L=last[k]||(last[k]={}),seen=new Set();for(const d of S[k]||[]){const id=String(d.id),j=JSON.stringify(d);seen.add(id);if(L[id]!==j){L[id]=j;setDoc(doc(db,COL[k],id),JSON.parse(j)).catch(err)}}for(const id in L){if(!seen.has(id)){delete L[id];deleteDoc(doc(db,COL[k],id)).catch(err)}}}}
+
+function save(){
+  const C = getCOL();
+  for(const k in C){
+    const L=last[k]||(last[k]={}),seen=new Set();
+    for(const d of S[k]||[]){
+      const id=String(d.id),j=JSON.stringify(d);
+      seen.add(id);
+      if(L[id]!==j){
+        L[id]=j;
+        setDoc(doc(db,C[k],id),JSON.parse(j)).catch(err);
+      }
+    }
+    for(const id in L){
+      if(!seen.has(id)){
+        delete L[id];
+        deleteDoc(doc(db,C[k],id)).catch(err);
+      }
+    }
+  }
+}
+
 function merge(){for(const k of['sales','mov']){S[k]=[...part[k].hist,...part[k].cur].sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d))}}
-function subSM(id){unsubSM.forEach(f=>f());unsubSM=[];if(!id)return;for(const k of['sales','mov'])unsubSM.push(onSnapshot(query(collection(db,k),where('s','==',id)),sn=>{part[k].cur=sn.docs.map(d=>d.data());merge();render()},err))}
-async function loadSes(id){if(!id||LD.has(id)||id===curId||!me)return;LD.add(id);try{const q=k=>getDocs(query(collection(db,k),where('s','==',id))),[a,b]=await Promise.all([q('sales'),q('mov')]);part.sales.hist.push(...a.docs.map(d=>d.data()));part.mov.hist.push(...b.docs.map(d=>d.data()));merge();render()}catch(e){LD.delete(id);err(e)}}
-function start(){stop();const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{S[k]=sn.docs.map(d=>d.data()).sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d));f&&f();render()},err));
- L('cats',collection(db,'cats'));L('prods',collection(db,'prods'));L('clienti',collection(db,'clienti'));
- L('bet_mov',collection(db,'bet_mov'));L('bet_ses',collection(db,'bet_ses'));
- L('ses',collection(db,'ses'),()=>{const c=cur()?.id||null;if(c!==curId){if(curId){part.sales.hist.push(...part.sales.cur);part.mov.hist.push(...part.mov.cur);LD.add(curId)}part.sales.cur=[];part.mov.cur=[];curId=c;subSM(c);merge()}});
- if(can('storico'))L('audit',query(collection(db,'audit'),orderBy('t','desc'),limit(150)))}
-function stop(){unsub.forEach(f=>f());unsubSM.forEach(f=>f());unsub=[];unsubSM=[];for(const k of['cats','prods','ses','sales','mov','audit','clienti','bet_mov','bet_ses'])S[k]=[];last={users:last.users};part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}};LD=new Set();curId=null}
+
+function subSM(id){
+  unsubSM.forEach(f=>f());
+  unsubSM=[];
+  if(!id)return;
+  const C = getCOL();
+  for(const k of['sales','mov']) unsubSM.push(onSnapshot(query(collection(db, C[k]), where('s','==',id)), sn=>{
+    part[k].cur=sn.docs.map(d=>d.data());
+    merge();
+    render();
+  }, err));
+}
+
+async function loadSes(id){
+  if(!id||LD.has(id)||id===curId||!me)return;
+  LD.add(id);
+  try{
+    const C = getCOL();
+    const q=k=>getDocs(query(collection(db, C[k]), where('s','==',id))), [a,b]=await Promise.all([q('sales'),q('mov')]);
+    part.sales.hist.push(...a.docs.map(d=>d.data()));
+    part.mov.hist.push(...b.docs.map(d=>d.data()));
+    merge();
+    render();
+  }catch(e){LD.delete(id);err(e);}
+}
+
+function start(){
+  stop();
+  const C = getCOL();
+  const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{
+    S[k]=sn.docs.map(d=>d.data()).sort(cmp);
+    last[k]={};
+    S[k].forEach(d=>stamp(k,d));
+    f&&f();
+    render();
+  },err));
+
+  L('cats',collection(db, C.cats));
+  L('prods',collection(db, C.prods));
+  L('clienti',collection(db, C.clienti));
+  L('bet_mov',collection(db, C.bet_mov));
+  L('bet_ses',collection(db, C.bet_ses));
+  L('ses',collection(db, C.ses),()=>{
+    const c=cur()?.id||null;
+    if(c!==curId){
+      if(curId){
+        part.sales.hist.push(...part.sales.cur);
+        part.mov.hist.push(...part.mov.cur);
+        LD.add(curId);
+      }
+      part.sales.cur=[];
+      part.mov.cur=[];
+      curId=c;
+      subSM(c);
+      merge();
+    }
+  });
+  if(can('storico')) L('audit',query(collection(db, C.audit),orderBy('t','desc'),limit(150)));
+}
+
+function stop(){
+  unsub.forEach(f=>f());
+  unsubSM.forEach(f=>f());
+  unsub=[];
+  unsubSM=[];
+  for(const k of['cats','prods','ses','sales','mov','audit','clienti','bet_mov','bet_ses'])S[k]=[];
+  last={users:last.users};
+  part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}};
+  LD=new Set();
+  curId=null;
+}
+
+function toggleTestMode(){
+  isTestMode = !isTestMode;
+  cart = {};
+  stop();
+  start();
+  toast(isTestMode ? '🧪 Passato ad AMBIENTE TEST (dati isolati)' : '✅ Tornato a DATI REALI');
+  render();
+}
+
 let LI=0;const nid=()=>LI=Math.max(LI+1,Date.now()*100+Math.floor(Math.random()*100));
 const tn=id=>'#'+(S.ses.findIndex(x=>x.id===id)+1);
 const tnBet=id=>'#'+((S.bet_ses||[]).findIndex(x=>x.id===id)+1);
 const vn=id=>{const a=S.sales.find(x=>x.id===id);return'#'+S.sales.filter(x=>x.s===a?.s&&x.id<=id).length};
 const log=(az,ent,det)=>S.audit.push({id:nid('a'),u:me?.id,n:me?.nome||'sistema',az,ent,det,t:Date.now()});
+
 const LIST=`Bevande|Campari Soda:150,Cedrata San Pellegrino:150,Cocktail San Pellegrino:150,Kinley Lemon Taste:150,Yoga succo ACE:150,Yoga succo pera:150,Yoga succo albicocca:150,Yoga succo ananas:150,Estathé limone:200,Estathé pesca:200,Coca-Cola normale:150,Coca-Cola Zero:150,Coca-Cola Zero Zero:150,Red Bull:200,Peroni:150,Corona:250,Heineken:200,Bjorne Beer (la birra dell’orso):300,Tennent’s:300,Peroni Chill Lemon:150,Tuborg:150
 Snack|Lupini:100,Ceci tostati:100,Misto salato:100,Olive piccanti:100,Olive:100,Arachidi salate:100,Fave tostate:100,Lupini piccanti:100
 Patatine|Pringles:200,Sticki 70 g:150,Virtual 50 g:150,Wackos Burger 40 g:150,Più Gusto Lime 70 g:150,Classica 80 g:150,Rodeo 120 g:250,Dixi Jalapeño 105 g:250,Dixi 50 g:150,Rustica 70 g:150,Grill 70 g:150,Più Gusto Vivace 70 g:150,Cross 50 g:150,Più Gusto Tartufo 70 g:150,Più Gusto Porchetta 70 g:150,Highlander Barbecue 70 g:150,Highlander Pomodoro 70 g:150,Wackos Cheeee 70 g:150,Wackos Ketchup 40 g:150
 Dolci|Oreo:100,Mordicchio:150,Snickers:150,Mars:150,Twix:150,Kit Kat:150,M&M’s:150,Kinder Bueno:150,Mikado:180,Kinder Pinguì cocco:100,Kinder Pinguì caramello:100,Kinder Pinguì:100,Kinder Fetta al Latte:100,Kinder Paradiso:100,Kinder Délice:100
 Cucina|Toast farcito:250,Toast con Nutella:200,Panino farcito:500,Panino con Nutella:300,Piadina farcita:400,Piadina con Nutella:300,Hot dog:300
 Liquori e distillati|Grappa:300,Rum Don Papa:500,Amaretto di Saronno:300,Vecchia Romagna:300,Borghetti:250,G&B:250,Stravecchio:250,Jack Daniel’s:400,Limoncello:250,Baileys:300,Fernet-Branca:300,Brancamenta:300,Martini bianco/rosso:300,Montenegro:250,Unicum:250,Averna:250,Lucano:250,Jägermeister:250,Aperol Spritz:500,Gin Lemon:600,Gin Tonic:600`;
-function lock(){cart={};pin='';sel=null;signOut(auth)}
-async function authFlow(u){if(busy)return;if(!u){stop();me=null;return render()}
- for(let i=0;i<50&&!S.users.some(x=>x.id===u.uid);i++)await new Promise(r=>setTimeout(r,100));
- me=S.users.find(x=>x.id===u.uid);if(!me||!me.att){await signOut(auth);msg='Utente non abilitato';return}
- tab='v';start();log('Accesso','utente',me.nome);save();render()}
-async function boot(){render();onSnapshot(collection(db,'profili'),sn=>{S.users=sn.docs.map(d=>d.data()).sort(cmp);last.users={};S.users.forEach(d=>stamp('users',d));render()},err);
- try{needSetup=!(await getDoc(doc(db,'config','init'))).exists()}catch(e){}onAuthStateChanged(auth,authFlow);render()}
-async function setup(nome,p){busy=true;try{const email='titolare'+Math.floor(Math.random()*9e4+1e4)+'@bar.app',c=await createUserWithEmailAndPassword(auth,email,pw(p)),pr={id:c.user.uid,nome,ruolo:'prop',att:1,email},b=writeBatch(db);b.set(doc(db,'profili',pr.id),pr);b.set(doc(db,'config','init'),{t:Date.now()});await b.commit();
- const b2=writeBatch(db);LIST.split('\n').forEach(l=>{const[n,ps]=l.split('|'),cid=nid();b2.set(doc(db,'cats',String(cid)),{id:cid,nome:n,att:1});ps.split(/,(?=[^,]*:\d+(?:,|$))/).forEach(x=>{const i=x.lastIndexOf(':'),pid=nid();b2.set(doc(db,'prods',String(pid)),{id:pid,c:cid,nome:x.slice(0,i),p:+x.slice(i+1),att:1})})});await b2.commit();needSetup=false}catch(e){msg='Errore: '+(e.code||e.message);busy=false;return render()}busy=false;authFlow(auth.currentUser)}
-async function newUser(nome,ruolo,p){if(!nome||!/^\d{4,6}$/.test(p)){alert('Nome e PIN 4–6 cifre');return false}
- try{const a2=getAuth(initializeApp(firebaseConfig,'s'+Date.now())),email=nome.toLowerCase().replace(/[^a-z0-9]/g,'')+Math.floor(Math.random()*9e4+1e4)+'@bar.app',c=await createUserWithEmailAndPassword(a2,email,pw(p));await signOut(a2);S.users.push({id:c.user.uid,nome,ruolo,att:1,email});log('Nuovo utente','utente',`${nome} (${RN[ruolo]})`);save();render()}catch(e){alert('Errore: '+(e.code||e.message));return false}}
-function cambioPin(){form('Cambia il tuo PIN',[{l:'Nuovo PIN (4–6 cifre)',k:'p',m:'numeric'}],async v=>{if(!/^\d{4,6}$/.test(v.p)){alert('PIN di 4–6 cifre');return false}try{await updatePassword(auth.currentUser,pw(v.p));log('Cambio PIN','utente',me.nome);save();toast('PIN aggiornato')}catch(e){alert('Esci e rientra, poi riprova ('+(e.code||e.message)+')');return false}})}
+
+function lock(){
+  cart={};
+  pin='';
+  sel=null;
+  if(isTestMode){
+    isTestMode = false;
+    stop();
+  }
+  signOut(auth);
+}
+
+async function authFlow(u){
+  if(busy)return;
+  if(!u){stop();me=null;return render()}
+  for(let i=0;i<50&&!S.users.some(x=>x.id===u.uid);i++)await new Promise(r=>setTimeout(r,100));
+  me=S.users.find(x=>x.id===u.uid);if(!me||!me.att){await signOut(auth);msg='Utente non abilitato';return}
+  tab='v';start();log('Accesso','utente',me.nome);save();render()
+}
+
+async function boot(){
+  render();
+  onSnapshot(collection(db,'profili'),sn=>{S.users=sn.docs.map(d=>d.data()).sort(cmp);last.users={};S.users.forEach(d=>stamp('users',d));render()},err);
+  try{needSetup=!(await getDoc(doc(db,'config','init'))).exists()}catch(e){}
+  onAuthStateChanged(auth,authFlow);
+  render();
+}
+
+async function setup(nome,p){
+  busy=true;
+  try{
+    const email='titolare'+Math.floor(Math.random()*9e4+1e4)+'@bar.app',c=await createUserWithEmailAndPassword(auth,email,pw(p)),pr={id:c.user.uid,nome,ruolo:'prop',att:1,email},b=writeBatch(db);
+    b.set(doc(db,'profili',pr.id),pr);b.set(doc(db,'config','init'),{t:Date.now()});await b.commit();
+    const b2=writeBatch(db);LIST.split('\n').forEach(l=>{const[n,ps]=l.split('|'),cid=nid();b2.set(doc(db,'cats',String(cid)),{id:cid,nome:n,att:1});ps.split(/,(?=[^,]*:\d+(?:,|$))/).forEach(x=>{const i=x.lastIndexOf(':'),pid=nid();b2.set(doc(db,'prods',String(pid)),{id:pid,c:cid,nome:x.slice(0,i),p:+x.slice(i+1),att:1})})});await b2.commit();needSetup=false
+  }catch(e){msg='Errore: '+(e.code||e.message);busy=false;return render()}
+  busy=false;authFlow(auth.currentUser);
+}
+
+async function newUser(nome,ruolo,p){
+  if(!nome||!/^\d{4,6}$/.test(p)){alert('Nome e PIN 4–6 cifre');return false}
+  try{
+    const a2=getAuth(initializeApp(firebaseConfig,'s'+Date.now())),email=nome.toLowerCase().replace(/[^a-z0-9]/g,'')+Math.floor(Math.random()*9e4+1e4)+'@bar.app',c=await createUserWithEmailAndPassword(a2,email,pw(p));
+    await signOut(a2);S.users.push({id:c.user.uid,nome,ruolo,att:1,email});log('Nuovo utente','utente',`${nome} (${RN[ruolo]})`);save();render();
+  }catch(e){alert('Errore: '+(e.code||e.message));return false}
+}
+
+function cambioPin(){
+  form('Cambia il tuo PIN',[{l:'Nuovo PIN (4–6 cifre)',k:'p',m:'numeric'}],async v=>{
+    if(!/^\d{4,6}$/.test(v.p)){alert('PIN di 4–6 cifre');return false}
+    try{await updatePassword(auth.currentUser,pw(v.p));log('Cambio PIN','utente',me.nome);save();toast('PIN aggiornato')}catch(e){alert('Esci e rientra, poi riprova ('+(e.code||e.message)+')');return false}
+  })
+}
+
 const cur=()=>S.ses.find(s=>!s.ch);
 const curBet=()=>(S.bet_ses||[]).find(s=>!s.ch);
 
@@ -147,6 +301,7 @@ function vendita(m,s){
     E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>x.id==i);return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);S.sales.push({id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null});log('Vendita','vendita '+vn(n),eur(T));save();cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
   ))}
  m.append(cd)}
+
 function tot(s){
  const v=S.sales.filter(x=>x.s===s.id),m=S.mov.filter(x=>x.s===s.id),
  g=v.reduce((a,x)=>a+x.tot,0),
@@ -169,11 +324,23 @@ function form(t,fs,ok,lab='Conferma'){const els={};const b=E('div',{},fs.map(f=>
 }));
 modal(t,b,[['Annulla',null,'g'],[lab,()=>{const v={};for(const k in els)v[k]=els[k].value.trim();return ok(v)}]])}
 function toast(m){msg=m;render()}
-function render(){clearTimeout(idle);const a=$('#app');a.replaceChildren();
+
+function render(){
+ clearTimeout(idle);const a=$('#app');a.replaceChildren();
  if(!me){a.append(login());return}
  idle=setTimeout(()=>{lock()},120000);
  const s=cur();
- a.append(E('header',{},E('b',{},'🍺 Bar & Scommesse',E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno aperto dal '+dt(s.ap):'Nessun turno aperto'}`)),E('button',{class:'b g s',onclick:cambioPin},'PIN'),E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')));
+ 
+ if(isTestMode){
+   a.append(E('div',{class:'test-banner'},'🧪 AMBIENTE TEST ATTIVO — Dati e Turni di Prova Isolati'));
+ }
+
+ a.append(E('header',{},
+   E('b',{},'🍺 Bar & Scommesse',E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno aperto dal '+dt(s.ap):'Nessun turno aperto'}`)),
+   isDavide()?E('button',{class:isTestMode?'b r s':'b g s',style:isTestMode?'background:#d9381e;color:#fff':'border-color:#b4471f;color:#b4471f;font-weight:bold',onclick:toggleTestMode},isTestMode?'← Dati Reali':'🧪 Test Mode'):null,
+   E('button',{class:'b g s',onclick:cambioPin},'PIN'),
+   E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')
+ ));
  const m=E('main');a.append(m);if(msg){m.append(E('div',{class:'cd pos'},msg));msg=''}
  const views = {v:vendita,t:turno,c:clienti,s:storico,a:admin,k:scommesse};
  (views[tab]||vendita)(m,s);
@@ -184,7 +351,8 @@ function render(){clearTimeout(idle);const a=$('#app');a.replaceChildren();
    isBetUser()&&['k','Registro Scommesse'],
    can('storico')&&['s','Storico'],
    can('catalogo')&&['a','Gestione']
- ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))}
+ ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))
+}
 ['pointerdown','keydown'].forEach(e=>addEventListener(e,()=>{if(me){clearTimeout(idle);idle=setTimeout(()=>{lock()},120000)}}));
 
 function login(){
@@ -441,7 +609,7 @@ function chiudiBet(){
 
 function scommesse(m) {
   if (!isBetUser()) {
-    m.append(E('div', {class:'cd neg'}, '🔒 Accesso Riservato: questa sezione è accessibile solo a Michele, Danilo ed Attilio.'));
+    m.append(E('div', {class:'cd neg'}, '🔒 Accesso Riservato: questa sezione è accessibile solo a Michele, Danilo, Attilio e Davide.'));
     return;
   }
 
@@ -658,29 +826,36 @@ function ops(sid,f){const L=[...S.sales.filter(x=>x.s===sid).map(x=>({...x,k:'ve
  L.forEach(x=>{const sale=x.k==='vendita',stt=sale?S.mov.some(m=>m.rif===x.id)?(x.items.every(i=>done(x,i.pid)>=i.q)?' · STORNATA':' · storno parziale'):'':'';
   const sg=x.k==='storno'||x.k==='uscita'?-1:1,op=S.users.find(u=>u.id===x.op)?.nome||x.opn||'';
   w.append(E('div',{class:'cd'},E('div',{class:'row',style:'border:0'},E('b',{},sale?`Vendita ${vn(x.id)}${stt}${x.sospesoCliente?' (SOSPESO: '+x.sospesoCliente+')':''}`:x.k==='storno'?`Storno di ${vn(x.rif)}`:x.k==='entrata'?'Entrata manuale':'Uscita manuale'),E('b',{class:sg<0?'neg':'pos'},eur(sg*(sale?x.tot:x.imp)))),E('div',{class:'sm mu'},`${dt(x.t)} · ${op}${x.motivo?' · Motivo: '+x.motivo:''}`),x.items&&E('div',{class:'sm'},x.items.map(i=>i.q+'× '+i.n).join(', ')),sale&&!f.ro&&cur()?.id===sid&&E('button',{class:'b g s',style:'margin-top:6px',onclick:()=>storno(x)},'Storna / correggi')))});return w}
+
 function storno(sale){const q={};sale.items.forEach(i=>q[i.pid]=0);const body=E('div',{}),mot=E('select',{},['Errore di battitura','Prodotto sbagliato','Cliente ha cambiato idea','Prodotto non disponibile','Altro'].map(x=>E('option',{},x))),note=E('input',{placeholder:'Dettaglio (obbligatorio se “Altro”)'}),tt=E('b',{});
  const upd=()=>tt.textContent='Importo da stornare: '+eur(sale.items.reduce((a,i)=>a+q[i.pid]*i.p,0));
  sale.items.forEach(i=>{const r=i.q-done(sale,i.pid),n=E('span',{},'0');body.append(E('div',{class:'row'},E('span',{},`${i.n} (${eur(i.p)}) · stornabili ${r}`),E('span',{},E('button',{class:'b g s',onclick:()=>{q[i.pid]=Math.max(0,q[i.pid]-1);n.textContent=q[i.pid];upd()}},'−'),' ',n,' ',E('button',{class:'b g s',onclick:()=>{q[i.pid]=Math.min(r,q[i.pid]+1);n.textContent=q[i.pid];upd()}},'+'))))});
  body.append(fl('Motivo (obbligatorio)',mot),note,E('div',{style:'margin-top:8px'},tt));upd();
  modal(`Storna vendita ${vn(sale.id)}`,body,[['Annulla',null,'g'],['Conferma storno',()=>{const it=sale.items.filter(i=>q[i.pid]>0).map(i=>({pid:i.pid,n:i.n,p:i.p,q:q[i.pid]})),imp=it.reduce((a,i)=>a+i.p*i.q,0),mt=mot.value==='Altro'?note.value.trim():mot.value+(note.value.trim()?' – '+note.value.trim():'');if(!imp||!mt){alert('Seleziona almeno un articolo e indica il motivo.');return false}
   const id=nid('m');S.mov.push({id,s:sale.s,tipo:'storno',imp,op:me.id,opn:me.nome,t:Date.now(),motivo:mt,rif:sale.id,items:it});log('Storno','vendita '+vn(sale.id),`${eur(imp)} – ${mt}`);save();toast('Storno registrato: '+eur(imp))}]])}
+
 function mov(tipo){form(tipo==='entrata'?'Entrata manuale':'Uscita manuale',[{l:'Importo (€)',k:'i',m:'decimal'},{l:'Motivo (obbligatorio)',k:'m'}],v=>{const i=par(v.i);if(i<=0||!v.m){alert('Importo e motivo obbligatori');return false}S.mov.push({id:nid('m'),s:cur().id,tipo,imp:i,op:me.id,opn:me.nome,t:Date.now(),motivo:v.m});log('Movimento '+tipo,'cassa',`${eur(i)} – ${v.m}`);save();toast('Movimento registrato')})}
+
 function fondoMod(){const s=cur();form('Modifica fondo cassa',[{l:'Nuovo fondo (€)',k:'f',m:'decimal',v:(s.fondo/100).toFixed(2).replace('.',',')},{l:'Motivo',k:'m'}],v=>{const f=par(v.f);if(f<0||!v.m){alert('Motivo obbligatorio');return false}log('Cambio fondo','turno '+tn(s.id),`${eur(s.fondo)} → ${eur(f)} – ${v.m}`);s.fondo=f;save();toast('Fondo aggiornato')})}
+
 function chiudi(){const s=cur(),t=tot(s),r=E('input',{inputmode:'decimal',placeholder:'0,00'}),n=E('input',{placeholder:'Nota (facoltativa)'}),d=E('b',{});r.oninput=()=>{const x=par(r.value)-t.teo;d.className=x<0?'neg':x>0?'pos':'';d.textContent='Differenza: '+eur(x)};d.textContent='Differenza: –';
  modal('Chiusura cassa',E('div',{},E('div',{class:'row'},'Contante teorico',E('b',{},eur(t.teo))),fl('Contante réellement contato (€)',r),E('div',{style:'margin:8px 0'},d),fl('Nota',n)),[['Annulla',null,'g'],['Chiudi e azzera',()=>{if(!r.value){alert('Inserisci il contante contato');return false}const re=par(r.value);Object.assign(s,{ch:Date.now(),chn:me.nome,chiusa:me.id,reale:re,teo:t.teo,diff:re-t.teo,nota:n.value.trim()});log('Chiusura turno','turno '+tn(s.id),`Teorico ${eur(t.teo)}, contato ${eur(re)}, differenza ${eur(re-t.teo)}`);save();toast('Turno chiuso. Differenza: '+eur(s.diff))},'r']])}
+
 function csv(rows){return'\ufeff'+rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(';')).join('\n')}
+
 async function dl(name,data){try{const d=await window.claude?.use('downloads');if(d){await d.save({filename:name,data});return}}catch(e){if(e?.code==='declined')return}modal('Esporta CSV (copia il testo)',E('textarea',{rows:10},data),[['Chiudi',null,'g']])}
 
 async function deleteSes(shiftId){
  if(!confirm(`Sei sicuro di voler eliminare il Turno #${tn(shiftId)} e tutte le sue operazioni?`)) return;
  try {
+  const C = getCOL();
   const sidStr = String(shiftId);
-  deleteDoc(doc(db, 'ses', sidStr)).catch(err);
+  deleteDoc(doc(db, C.ses, sidStr)).catch(err);
 
   const salesToDelete = S.sales.filter(x => x.s === shiftId);
   const movToDelete = S.mov.filter(x => x.s === shiftId);
-  salesToDelete.forEach(sa => deleteDoc(doc(db, 'sales', String(sa.id))).catch(err));
-  movToDelete.forEach(mo => deleteDoc(doc(db, 'mov', String(mo.id))).catch(err));
+  salesToDelete.forEach(sa => deleteDoc(doc(db, C.sales, String(sa.id))).catch(err));
+  movToDelete.forEach(mo => deleteDoc(doc(db, C.mov, String(mo.id))).catch(err));
 
   S.ses = S.ses.filter(x => x.id !== shiftId);
   for(const k of ['sales','mov']){
@@ -703,13 +878,14 @@ async function deleteSes(shiftId){
 async function deleteAllSes(){
  if(!confirm("ATTENZIONE: Sei sicuro di voler eliminare TUTTI i turni e le relative vendite e movimenti? L'operazione non è reversibile!")) return;
  try {
+  const C = getCOL();
   const sesIds = S.ses.map(x => String(x.id));
   const salesIds = S.sales.map(x => String(x.id));
   const movIds = S.mov.map(x => String(x.id));
 
-  for(const id of sesIds) deleteDoc(doc(db, 'ses', id)).catch(err);
-  for(const id of salesIds) deleteDoc(doc(db, 'sales', id)).catch(err);
-  for(const id of movIds) deleteDoc(doc(db, 'mov', id)).catch(err);
+  for(const id of sesIds) deleteDoc(doc(db, C.ses, id)).catch(err);
+  for(const id of salesIds) deleteDoc(doc(db, C.sales, id)).catch(err);
+  for(const id of movIds) deleteDoc(doc(db, C.mov, id)).catch(err);
 
   S.ses = [];
   part.sales.cur = []; part.sales.hist = [];
@@ -807,4 +983,3 @@ boot();
 </script>
 </body>
 </html>
-
