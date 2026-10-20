@@ -308,9 +308,11 @@ function tot(s){
  g=v.reduce((a,x)=>a+x.tot,0),
  cashSales=v.filter(x=>!x.sospesoCliente).reduce((a,x)=>a+x.tot,0),
  st=m.filter(x=>x.tipo==='storno').reduce((a,x)=>a+x.imp,0),
- en=m.filter(x=>x.tipo==='entrata').reduce((a,x)=>a+x.imp,0),
+ isInc = x => x.isIncassoDebito || (x.motivo && x.motivo.toLowerCase().includes('incasso')),
+ en=m.filter(x=>x.tipo==='entrata' && !isInc(x)).reduce((a,x)=>a+x.imp,0),
+ incDeb=m.filter(x=>x.tipo==='entrata' && isInc(x)).reduce((a,x)=>a+x.imp,0),
  us=m.filter(x=>x.tipo==='uscita').reduce((a,x)=>a+x.imp,0);
- return{g,st,net:g-st,en,us,teo:s.fondo+cashSales-st+en-us};
+ return{g,st,net:g-st,en,incDeb,us,teo:s.fondo+cashSales-st+en+incDeb-us};
 }
 
 const done=(sale,pid)=>S.mov.filter(m=>m.rif===sale.id&&m.tipo==='storno').reduce((a,m)=>a+(m.items.find(i=>i.pid===pid)?.q||0),0);
@@ -368,7 +370,16 @@ function login(){
 function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'decimal',v:'100,00'}],v=>{const f=par(v.f);if(f<0)return false;const s={id:nid('t'),da:me.id,dan:me.nome,ap:Date.now(),fondo:f,ch:null};S.ses.push(s);log('Apertura turno','turno '+tn(s.id),'Fondo '+eur(f));save();toast('Turno aperto con fondo '+eur(f))})}
 function turno(m,s){
  if(!s){m.append(E('div',{class:'cd mu'},'Nessun turno aperto.',can('fondo')&&E('div',{},E('button',{class:'b',style:'margin-top:8px',onclick:apri},'Apri turno'))));return}
- const t=tot(s);m.append(E('div',{class:'k'},[['Fondo iniziale',t.g*0+s.fondo],['Vendite lorde',t.g],['Storni / correzioni',-t.st],['Incasso netto',t.net],['Entrate manuali',t.en],['Uscite manuali',-t.us]].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
+ const t=tot(s);
+ m.append(E('div',{class:'k'},[
+   ['Fondo iniziale',s.fondo],
+   ['Vendite lorde',t.g],
+   ['Storni / correzioni',-t.st],
+   ['Incasso netto',t.net],
+   ['Entrate manuali',t.en],
+   ['Incassi debiti',t.incDeb],
+   ['Uscite manuali',-t.us]
+ ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
  if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
 function clienti(m,s){
@@ -492,6 +503,7 @@ function clienti(m,s){
         id: nid('m'),
         s: activeShift.id,
         tipo: 'entrata',
+        isIncassoDebito: true,
         imp: imp,
         op: me.id,
         opn: me.nome,
@@ -825,7 +837,8 @@ function ops(sid,f){const L=[...S.sales.filter(x=>x.s===sid).map(x=>({...x,k:'ve
  if(!L.length)w.append(E('div',{class:'mu'},'Nessuna operazione.'));
  L.forEach(x=>{const sale=x.k==='vendita',stt=sale?S.mov.some(m=>m.rif===x.id)?(x.items.every(i=>done(x,i.pid)>=i.q)?' · STORNATA':' · storno parziale'):'':'';
   const sg=x.k==='storno'||x.k==='uscita'?-1:1,op=S.users.find(u=>u.id===x.op)?.nome||x.opn||'';
-  const labelEntrata = x.motivo && x.motivo.toLowerCase().includes('incasso') ? 'Debito incassato' : 'Entrata manuale';
+  const isInc = x.isIncassoDebito || (x.motivo && x.motivo.toLowerCase().includes('incasso'));
+  const labelEntrata = isInc ? 'Debito incassato' : 'Entrata manuale';
   w.append(E('div',{class:'cd'},E('div',{class:'row',style:'border:0'},E('b',{},sale?`Vendita ${vn(x.id)}${stt}${x.sospesoCliente?' (SOSPESO: '+x.sospesoCliente+')':''}`:x.k==='storno'?`Storno di ${vn(x.rif)}`:x.k==='entrata'?labelEntrata:'Uscita manuale'),E('b',{class:sg<0?'neg':'pos'},eur(sg*(sale?x.tot:x.imp)))),E('div',{class:'sm mu'},`${dt(x.t)} · ${op}${x.motivo?' · Motivo: '+x.motivo:''}`),x.items&&E('div',{class:'sm'},x.items.map(i=>i.q+'× '+i.n).join(', ')),sale&&!f.ro&&cur()?.id===sid&&E('button',{class:'b g s',style:'margin-top:6px',onclick:()=>storno(x)},'Storna / correggi')))});return w}
 
 function storno(sale){const q={};sale.items.forEach(i=>q[i.pid]=0);const body=E('div',{}),mot=E('select',{},['Errore di battitura','Prodotto sbagliato','Cliente ha cambiato idea','Prodotto non disponibile','Altro'].map(x=>E('option',{},x))),note=E('input',{placeholder:'Dettaglio (obbligatorio se “Altro”)'}),tt=E('b',{});
