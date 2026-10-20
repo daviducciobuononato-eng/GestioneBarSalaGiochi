@@ -37,9 +37,10 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut,updatePassword} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,doc,getDoc,getDocs,setDoc,deleteDoc,onSnapshot,query,where,orderBy,limit,writeBatch} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import {firebaseConfig} from './firebase-config.js';
+
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
 const $=s=>document.querySelector(s),
-E=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);else if(k==='v')e.value=a[k];else e.setAttribute(k,a[k])}c.flat().forEach(x=>x!=null&&e.append(x.nodeType?x:documentcreateTextNode(x)));return e},
+E=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);else if(k==='v')e.value=a[k];else e.setAttribute(k,a[k])}c.flat().forEach(x=>x!=null&&e.append(x.nodeType?x:document.createTextNode(x)));return e},
 eur=c=>(c<0?'−':'')+(Math.abs(c)/100).toFixed(2).replace('.',',')+' €',
 par=s=>Math.round(parseFloat(String(s).replace(',','.'))*100)||0,
 dt=t=>new Date(t).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}),
@@ -368,7 +369,7 @@ function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'deci
 function turno(m,s){
  if(!s){m.append(E('div',{class:'cd mu'},'Nessun turno aperto.',can('fondo')&&E('div',{},E('button',{class:'b',style:'margin-top:8px',onclick:apri},'Apri turno'))));return}
  const t=tot(s);m.append(E('div',{class:'k'},[['Fondo iniziale',t.g*0+s.fondo],['Vendite lorde',t.g],['Storni / correzioni',-t.st],['Incasso netto',t.net],['Entrate manuali',t.en],['Uscite manuali',-t.us]].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
- if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:()=>fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
+ if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
 function clienti(m,s){
  const barClients = S.clienti.filter(x => x.tipo !== 'bet');
@@ -660,7 +661,6 @@ function scommesse(m) {
       E('button', {class:'b r', onclick: chiudiBet}, 'Chiudi Cassa')
     ),
 
-    /* LISTA CLIENTI SCOMMESSE IN EVIDENZA */
     E('h3', {style:'margin-top:20px'}, 'Clienti & Saldi Individuali')
   );
 
@@ -698,6 +698,7 @@ function scommesse(m) {
     opsScommesse()
   );
 }
+
 function opsScommesse(){
   const list = [...(S.bet_mov || [])].sort((a,b) => b.t - a.t);
   const container = E('div', {});
@@ -820,7 +821,6 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
     }]
   ]);
 }
-
 function ops(sid,f){const L=[...S.sales.filter(x=>x.s===sid).map(x=>({...x,k:'vendita'})),...S.mov.filter(x=>x.s===sid).map(x=>({...x,k:x.tipo}))].filter(x=>(!f.o||(x.op==f.o))&&(!f.t||x.k===f.t)&&(!f.p||(x.items||[]).some(i=>i.n.toLowerCase().includes(f.p.toLowerCase())))&&(!f.d||new Date(x.t).toLocaleDateString('en-CA')===f.d)).sort((a,b)=>b.t-a.t),w=E('div',{});
  if(!L.length)w.append(E('div',{class:'mu'},'Nessuna operazione.'));
  L.forEach(x=>{const sale=x.k==='vendita',stt=sale?S.mov.some(m=>m.rif===x.id)?(x.items.every(i=>done(x,i.pid)>=i.q)?' · STORNATA':' · storno parziale'):'':'';
@@ -983,3 +983,4 @@ boot();
 </script>
 </body>
 </html>
+
