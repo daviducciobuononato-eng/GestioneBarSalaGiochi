@@ -325,8 +325,8 @@ function tot(s){
  });
 
  const totDebitiCreati = sospSales + debMan;
- const g = rawSalesTotal + debMan; // Vendite lorde comprensive di vendite e debiti manuali
- const net = cashSales - st;       // Incasso netto reale SOLO CONTANTI realmente incassati
+ const g = rawSalesTotal + debMan;
+ const net = cashSales + incDeb - st; // Incasso netto = contanti vendite + debiti incassati - storni
 
  return {
    g,
@@ -339,7 +339,7 @@ function tot(s){
    en,
    incDeb,
    us,
-   teo: s.fondo + net + en + incDeb - us
+   teo: s.fondo + net + en - us
  };
 }
 
@@ -404,8 +404,8 @@ function turno(m,s){
    ['Vendite lorde',t.g],
    ['Storni / correzioni',-t.st],
    ['Incasso netto',t.net],
-   ['Entrate manuali',t.en],
    ['Incassi debiti',t.incDeb],
+   ['Entrate manuali',t.en],
    ['Uscite manuali',-t.us]
  ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
  if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
@@ -955,7 +955,7 @@ async function mostraOperazioniTurno(s){
     E('div', {class:'k', style:'grid-template-columns:1fr 1fr;gap:6px'},
       E('div', {}, E('small', {}, 'Fondo Iniziale'), E('b', {}, eur(s.fondo))),
       E('div', {}, E('small', {}, 'Vendite Lorde'), E('b', {}, eur(t.g))),
-      E('div', {}, E('small', {}, 'Incasso Netto Contanti'), E('b', {}, eur(t.net))),
+      E('div', {}, E('small', {}, 'Incasso Netto (Contanti + Incassi Debiti)'), E('b', {}, eur(t.net))),
       E('div', {}, E('small', {}, 'Debiti Creati (Sospesi)'), E('b', {class:'neg'}, eur(t.totDebitiCreati))),
       E('div', {}, E('small', {}, 'Debiti Saldati / Incassati'), E('b', {class:'pos'}, eur(t.incDeb))),
       E('div', {}, E('small', {}, 'Entrate Manuali'), E('b', {}, eur(t.en))),
@@ -981,7 +981,7 @@ function storico(m){
      E('b',{},`Turno Bar ${tn(s.id)}${s.ch?'':' (aperto)'}`),
      E('span',{class:'mu sm'},dt(s.ap))
     ),
-    E('div',{class:'sm'},`Fondo ${eur(s.fondo)} · Incasso netto ${eur(t.net)} · Teorico ${eur(t.teo)}`+(s.ch?` · Contato ${eur(s.reale)}`:'')),
+    E('div',{class:'sm'},`Fondo ${eur(s.fondo)} · Netto ${eur(t.net)} · Teorico ${eur(t.teo)}`+(s.ch?` · Contato ${eur(s.reale)}`:'')),
     E('div',{class:'sm',style:'margin-top:2px;color:var(--mu)'},`Vendite lorde: ${eur(t.g)} · Debiti creati: ${eur(t.totDebitiCreati)} · Incassati: ${eur(t.incDeb)}`),
     s.ch&&E('b',{class:s.diff<0?'neg':s.diff>0?'pos':'',style:'display:block;margin-top:2px'},'Differenza '+eur(s.diff)),
     E('div',{class:'sm mu',style:'margin-top:2px'},`Aperto da ${s.dan}${s.ch?' · chiuso da '+s.chn+' il '+dt(s.ch)+(s.nota?' · '+s.nota:''):''}`),
@@ -1042,7 +1042,3 @@ boot();
 </script>
 </body>
 </html>
-
-
-
-
