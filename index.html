@@ -404,7 +404,7 @@ function turno(m,s){
    ['Vendite lorde',t.g],
    ['Storni / correzioni',-t.st],
    ['Incasso netto',t.net],
-   ['Incassi debiti',t.incDeb],
+   ['Incassi debiti (solo informativo)',t.incDeb],
    ['Entrate manuali',t.en],
    ['Uscite manuali',-t.us]
  ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
