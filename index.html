@@ -530,7 +530,6 @@ function scommesse(m) {
     opsScommesse()
   );
 }
-
 function opsScommesse(){
   const list = [...(S.bet_mov || [])].sort((a,b) => b.t - a.t);
   const container = E('div', {});
@@ -728,6 +727,12 @@ async function deleteAllSes(){
  } catch(e) { err(e); }
 }
 
+async function mostraOperazioniTurno(s){
+  await loadSes(s.id);
+  const opsContainer = E('div', {style:'max-height:60vh;overflow-y:auto;padding-right:4px'}, ops(s.id, {ro:1}));
+  modal(`Operazioni Turno Bar ${tn(s.id)}`, opsContainer, [['Chiudi', null, 'g']]);
+}
+
 function storico(m){
  const sel=(k,l,o)=>E('select',{onchange:e=>{F[k]=e.target.value;render()}},E('option',{value:''},l),o.map(([v,n])=>E('option',{value:v,...(String(F[k])===String(v)?{selected:''}:{})},n)));
  m.append(
@@ -746,7 +751,7 @@ function storico(m){
     s.ch&&E('b',{class:s.diff<0?'neg':s.diff>0?'pos':''},'Differenza '+eur(s.diff)),
     E('div',{class:'sm mu'},`Aperto da ${s.dan}${s.ch?' · chiuso da '+s.chn+' il '+dt(s.ch)+(s.nota?' · '+s.nota:''):''}`),
     E('div',{class:'f',style:'margin-top:8px'},
-     E('button',{class:'b g s',onclick:()=>{F.s=s.id;render()}},'Vedi operazioni'),
+     E('button',{class:'b g s',onclick:()=>mostraOperazioniTurno(s)},'Vedi operazioni'),
      (can('storico') || me?.ruolo === 'prop') ? E('button',{class:'b r s',onclick:()=>deleteSes(s.id)},'🗑️ Elimina') : null
     )
    )
@@ -802,3 +807,4 @@ boot();
 </script>
 </body>
 </html>
+
