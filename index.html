@@ -412,12 +412,14 @@ function turno(m,s){
  if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
 
-function modificaMovimentoCliente(c, st) {
+async function modificaMovimentoCliente(c, st) {
+ if (st.sId) await loadSes(st.sId);
  const defaultVal = (st.imp / 100).toFixed(2).replace('.', ',');
  form(`Modifica Movimento - ${c.nome}`, [
   {l:'Importo (€)', k:'i', m:'decimal', v: defaultVal},
   {l:'Causale / Note', k:'m', v: st.nota || ''}
- ], v => {
+ ], async v => {
+  if (st.sId) await loadSes(st.sId);
   const newImp = par(v.i);
   if (newImp <= 0) { alert('Inserisci un importo valido'); return false; }
 
@@ -425,28 +427,26 @@ function modificaMovimentoCliente(c, st) {
   const diff = newImp - oldImp;
   const isDebito = st.tipo === 'debito_manuale' || st.tipo === 'sospeso_cassa';
 
-  if (diff !== 0) {
-   if (isDebito) {
-    c.sospeso = (c.sospeso || 0) + diff;
-   } else {
-    c.sospeso = (c.sospeso || 0) - diff;
-   }
+  if (isDebito) {
+   c.sospeso = (c.sospeso || 0) + diff;
+  } else {
+   c.sospeso = (c.sospeso || 0) - diff;
+  }
 
-   // Sincronizza con i movimenti di cassa se era un incasso saldo
-   if (st.tipo === 'incasso_saldo') {
-    const linkedMov = S.mov.find(m => (st.movId && m.id === st.movId) || (m.isIncassoDebito && Math.abs(m.t - st.t) < 3000));
-    if (linkedMov) {
-     linkedMov.imp = newImp;
-     if (v.m) linkedMov.motivo = `Incasso saldo/pagamento: ${c.nome} – ${v.m.trim()}`;
-    }
+  // Sincronizza con i movimenti di cassa del turno (anche se chiuso)
+  if (st.tipo === 'incasso_saldo') {
+   const linkedMov = S.mov.find(m => (st.movId && m.id === st.movId) || (m.isIncassoDebito && Math.abs(m.t - st.t) < 5000));
+   if (linkedMov) {
+    linkedMov.imp = newImp;
+    linkedMov.motivo = `Incasso saldo/pagamento: ${c.nome}${v.m ? ' – ' + v.m.trim() : ''}`;
    }
+  }
 
-   // Sincronizza con le vendite se era una vendita sospesa
-   if (st.tipo === 'sospeso_cassa') {
-    const linkedSale = S.sales.find(sa => sa.id === st.id || Math.abs(sa.t - st.t) < 3000);
-    if (linkedSale) {
-     linkedSale.tot = newImp;
-    }
+  // Sincronizza con le vendite del turno se era una vendita sospesa
+  if (st.tipo === 'sospeso_cassa') {
+   const linkedSale = S.sales.find(sa => sa.id === st.id || Math.abs(sa.t - st.t) < 5000);
+   if (linkedSale) {
+    linkedSale.tot = newImp;
    }
   }
 
@@ -455,7 +455,7 @@ function modificaMovimentoCliente(c, st) {
 
   log('Modifica movimento cliente', c.nome, `${st.tipo}: da ${eur(oldImp)} a ${eur(newImp)}`);
   save();
-  toast('Movimento aggiornato');
+  toast('Movimento aggiornato nel cliente e nel turno');
   render();
  });
 }
@@ -1095,4 +1095,3 @@ boot();
 </script>
 </body>
 </html>
-
