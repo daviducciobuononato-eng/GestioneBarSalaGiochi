@@ -248,7 +248,7 @@ const curBet=()=>(S.bet_ses||[]).find(s=>!s.ch);
 function vendita(m,s){
  if(!s){m.append(E('div',{class:'cd'},E('b',{},'Nessun turno aperto'),E('p',{class:'mu'},'Solo Proprietario o Responsabile possono aprire il turno.'),can('fondo')&&E('button',{class:'b',onclick:apri},'Apri turno e imposta fondo cassa')));return}
  const cs=S.cats.filter(c=>c.att);cat=cs.find(c=>c.id===cat)?cat:cs[0]?.id;
- m.append(E('div',{class:'cats'},cs.map(c=>E('button',{class:c.id===cat?'on':'',onclick:()=>{cat=c.id;render()}},c.nome))),E('div',{class:'gr'},S.prods.filter(p=>p.c===cat&&p.att).map(p=>E('button',{onclick:()=>{cart[p.id]=(cart[p.id]||0)+1;render()}},p.nome,E('small',{},eur(p.p))))));
+ m.append(E('div',{class:'cats'},cs.map(c=>E('button',{class:c.id===cat?'on':'',onclick:()=>{cat=c.id;render()}},c.nome))),E('div',{class:'gr'},S.prods.filter(p=>p.c===cat&&p.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(p=>E('button',{onclick:()=>{cart[p.id]=(cart[p.id]||0)+1;render()}},p.nome,E('small',{},eur(p.p))))));
  const ids=Object.keys(cart),T=ids.reduce((a,i)=>a+cart[i]*S.prods.find(p=>p.id==i).p,0);
  const cd=E('div',{class:'cd',style:'margin-top:14px'},E('b',{},'Conto'),ids.length?'':E('div',{class:'mu'},'Tocca i prodotti per aggiungerli'));
  ids.forEach(i=>{const p=S.prods.find(x=>x.id==i);cd.append(E('div',{class:'row'},E('span',{},p.nome),E('span',{},E('button',{class:'b g s',onclick:()=>{cart[i]--;if(!cart[i])delete cart[i];render()}},'−'),' '+cart[i]+' ',E('button',{class:'b g s',onclick:()=>{cart[i]++;render()}},'+'),' '+eur(cart[i]*p.p))))});
@@ -1054,9 +1054,9 @@ function storico(m){
 
 function admin(m){
  m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;S.cats.push({id:nid('c'),nome:v.n,att:1});log('Nuova categoria','categoria',v.n);save();render()})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:S.cats.map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;S.prods.push({id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1});log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`);save();render()})},'+ Prodotto')));
- S.cats.forEach(c=>{const d=E('details',{class:'cd'},E('summary',{},E('b',{},c.nome+(c.att?'':' (disattiva)')),' ',E('span',{class:'mu sm'},S.prods.filter(p=>p.c===c.id).length+' prodotti')));
+ S.cats.forEach(c=>{const catProds=S.prods.filter(p=>p.c===c.id).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));const d=E('details',{class:'cd'},E('summary',{},E('b',{},c.nome+(c.att?'':' (disattiva)')),' ',E('span',{class:'mu sm'},catProds.length+' prodotti')));
   d.append(E('div',{class:'f'},E('button',{class:'b g s',onclick:()=>{c.att=c.att?0:1;log(c.att?'Categoria riattivata':'Categoria disattivata','categoria',c.nome);save();render()}},c.att?'Disattiva categoria':'Riattiva categoria')));
-  S.prods.filter(p=>p.c===c.id).forEach(p=>{
+  catProds.forEach(p=>{
     d.append(E('div',{class:'row'},
       E('span',{},p.nome+' · '+eur(p.p)+(p.att?'':' (disattivo)')),
       E('span',{},
@@ -1090,6 +1090,11 @@ function admin(m){
   )
  }
 }
+
+boot();
+</script>
+</body>
+</html>
 
 boot();
 </script>
