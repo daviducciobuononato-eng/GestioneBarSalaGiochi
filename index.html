@@ -247,7 +247,7 @@ const curBet=()=>(S.bet_ses||[]).find(s=>!s.ch);
 
 function vendita(m,s){
  if(!s){m.append(E('div',{class:'cd'},E('b',{},'Nessun turno aperto'),E('p',{class:'mu'},'Solo Proprietario o Responsabile possono aprire il turno.'),can('fondo')&&E('button',{class:'b',onclick:apri},'Apri turno e imposta fondo cassa')));return}
- const cs=S.cats.filter(c=>c.att);cat=cs.find(c=>c.id===cat)?cat:cs[0]?.id;
+ const cs=S.cats.filter(c=>c.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));cat=cs.find(c=>c.id===cat)?cat:cs[0]?.id;
  m.append(E('div',{class:'cats'},cs.map(c=>E('button',{class:c.id===cat?'on':'',onclick:()=>{cat=c.id;render()}},c.nome))),E('div',{class:'gr'},S.prods.filter(p=>p.c===cat&&p.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(p=>E('button',{onclick:()=>{cart[p.id]=(cart[p.id]||0)+1;render()}},p.nome,E('small',{},eur(p.p))))));
  const ids=Object.keys(cart),T=ids.reduce((a,i)=>a+cart[i]*S.prods.find(p=>p.id==i).p,0);
  const cd=E('div',{class:'cd',style:'margin-top:14px'},E('b',{},'Conto'),ids.length?'':E('div',{class:'mu'},'Tocca i prodotti per aggiungerli'));
@@ -408,7 +408,7 @@ function turno(m,s){
    ['Uscite manuali',-t.us],
    ['Incassi debiti (solo informativo)',t.incDeb],
    ['Debiti (solo informativo)',t.totDebitiCreati]
- ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
+ ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CASSETTO'),E('b',{style:'font-size:26px'},eur(t.teo)))));
  if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
 
@@ -657,7 +657,7 @@ function getBetClientStats(clientName){
 }
 
 function apriBet(){
-  form('Apri Turno Scommesse', [{l:'Fondo cassa iniziale scommesse (€)', k:'f', m:'decimal', v:'100,00'}], v => {
+  form('Apri Turno', [{l:'Fondo cassa iniziale scommesse (€)', k:'f', m:'decimal', v:'100,00'}], v => {
     const f = par(v.f);
     if (f < 0) return false;
     const s = { id: nid('bt'), da: me.id, dan: me.nome, ap: Date.now(), fondo: f, ch: null };
@@ -665,7 +665,7 @@ function apriBet(){
     S.bet_ses.push(s);
     log('Apertura turno scommesse', 'turno ' + tnBet(s.id), 'Fondo ' + eur(f));
     save();
-    toast('Turno scommesse aperto con fondo ' + eur(f));
+    toast('Turno aperto con fondo ' + eur(f));
     render();
   });
 }
@@ -684,20 +684,20 @@ function chiudiBet(){
   };
   d.textContent = 'Differenza: –';
 
-  modal('Chiusura Cassa Scommesse', E('div', {},
-    E('div', {class:'row'}, 'Contante teorico cassa scommesse', E('b', {}, eur(t.teo))),
+  modal('Chiusura Cassa', E('div', {},
+    E('div', {class:'row'}, 'CASSETTO', E('b', {}, eur(t.teo))),
     fl('Contante réellement contato (€)', r),
     E('div', {style:'margin:8px 0'}, d),
     fl('Nota', n)
   ), [
     ['Annulla', null, 'g'],
-    ['Chiudi e azzera cassa scommesse', () => {
+    ['Chiudi e azzera cassa', () => {
       if (!r.value) { alert('Inserisci il contante contato'); return false; }
       const re = par(r.value);
       Object.assign(s, { ch: Date.now(), chn: me.nome, chiusa: me.id, reale: re, teo: t.teo, diff: re - t.teo, nota: n.value.trim() });
       log('Chiusura turno scommesse', 'turno ' + tnBet(s.id), `Teorico ${eur(t.teo)}, contato ${eur(re)}, diff ${eur(re - t.teo)}`);
       save();
-      toast('Turno scommesse chiuso. Differenza: ' + eur(s.diff));
+      toast('Turno chiuso. Differenza: ' + eur(s.diff));
       render();
     }, 'r']
   ]);
@@ -719,7 +719,7 @@ function scommesse(m) {
         E('p', {class:'mu'}, 'Per inserire addebiti, incassi o vincite scommesse occorre prima aprire un turno scommesse separato con il relativo fondo cassa.'),
         E('button', {class:'b', style:'margin-top:8px', onclick: apriBet}, 'Apri Turno e Imposta Fondo Cassa')
       ),
-      E('h3', {style:'margin-top:16px'}, 'Registro Movimenti Scommesse'),
+      E('h3', {style:'margin-top:16px'}, 'Registro'),
       opsScommesse()
     );
     return;
@@ -1053,8 +1053,8 @@ function storico(m){
  m.append(E('h3',{},'Registro attività'),...[...S.audit].reverse().slice(0,150).filter(a=>!F.o||a.u==F.o).map(a=>E('div',{class:'row sm'},E('span',{},E('b',{},a.az),' · '+a.ent+' · '+a.det),E('span',{class:'mu'},a.n+' · '+dt(a.t)))))}
 
 function admin(m){
- m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;S.cats.push({id:nid('c'),nome:v.n,att:1});log('Nuova categoria','categoria',v.n);save();render()})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:S.cats.map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;S.prods.push({id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1});log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`);save();render()})},'+ Prodotto')));
- S.cats.forEach(c=>{const catProds=S.prods.filter(p=>p.c===c.id).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));const d=E('details',{class:'cd'},E('summary',{},E('b',{},c.nome+(c.att?'':' (disattiva)')),' ',E('span',{class:'mu sm'},catProds.length+' prodotti')));
+ m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;S.cats.push({id:nid('c'),nome:v.n,att:1});log('Nuova categoria','categoria',v.n);save();render()})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:[...S.cats].sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;S.prods.push({id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1});log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`);save();render()})},'+ Prodotto')));
+ const sortedCats=[...S.cats].sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));sortedCats.forEach(c=>{const catProds=S.prods.filter(p=>p.c===c.id).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));const d=E('details',{class:'cd'},E('summary',{},E('b',{},c.nome+(c.att?'':' (disattiva)')),' ',E('span',{class:'mu sm'},catProds.length+' prodotti')));
   d.append(E('div',{class:'f'},E('button',{class:'b g s',onclick:()=>{c.att=c.att?0:1;log(c.att?'Categoria riattivata':'Categoria disattivata','categoria',c.nome);save();render()}},c.att?'Disattiva categoria':'Riattiva categoria')));
   catProds.forEach(p=>{
     d.append(E('div',{class:'row'},
@@ -1090,13 +1090,3 @@ function admin(m){
   )
  }
 }
-
-boot();
-</script>
-</body>
-</html>
-
-boot();
-</script>
-</body>
-</html>
