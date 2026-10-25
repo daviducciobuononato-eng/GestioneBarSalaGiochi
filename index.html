@@ -1092,19 +1092,3 @@ boot();
 </script>
 </body>
 </html>
- if(can('utenti')){
-  m.append(E('h3',{},'Utenti & Permessi'),
-    E('button',{class:'b g',style:'margin-bottom:10px',onclick:()=>{
-      form('Nuovo utente',[{l:'Nome',k:'n'},{l:'Ruolo',k:'r',o:[['dip','Dipendente'],['resp','Responsabile'],['prop','Proprietario']]},{l:'PIN (4–6 cifre)',k:'p',m:'numeric'}],async v=>{
-        return await newUser(v.n,v.r,v.p);
-      })
-    }},'+ Nuovo utente'),
-    ...S.users.map(u=>E('div',{class:'cd'},
-      E('div',{class:'row',style:'border:0'},
-        E('b',{},u.nome+' ('+RN[u.ruolo]+')'+(u.att?'':' (disattivo)')),
-        u.id!==me.id?E('button',{class:'b g s',onclick:()=>{u.att=u.att?0:1;log(u.att?'Utente riattivato':'Utente disattivato','utente',u.nome);save();render()}},u.att?'Disattiva':'Riattiva'):null
-      )
-    ))
-  )
- }
-}
