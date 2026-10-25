@@ -858,6 +858,21 @@ function scommesse(m) {
   }
 
   const t = totBet(s);
+
+  // Calcolo Debiti e Crediti Complessivi (All-Time) di tutti i clienti del Registro
+  const betClientsAll = S.clienti.filter(x => x.tipo === 'bet');
+  let totDebitiAllTime = 0;
+  let totCreditiAllTime = 0;
+  betClientsAll.forEach(c => {
+    const st = getBetClientStats(c.nome);
+    if (st.saldoNetto > 0) totDebitiAllTime += st.saldoNetto;
+    else if (st.saldoNetto < 0) totCreditiAllTime += Math.abs(st.saldoNetto);
+  });
+
+  const incassoCassettoNetto = t.cassaIn - t.pag;
+  const totaleCerchioTurno = shiftStats.totDebiti + incassoCassettoNetto;
+
+  // --- DASHBOARD PRINCIPALE COMPLETA ---
   m.append(
     E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
       E('div', {class:'row', style:'border:0;padding:0'},
@@ -866,46 +881,73 @@ function scommesse(m) {
       ),
       E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da: ${s.dan}`)
     ),
-    E('div', {class:'k', style:'margin-bottom:12px'},
-      E('div', {style:'background:#2b7a4b'},
-        E('small', {}, 'CASSETTO'),
-        E('b', {style:'font-size:24px'}, eur(t.teo)),
-        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo init: ${eur(s.fondo)} · Incassi: +${eur(t.cassaIn)}${t.pag > 0 ? ' · Pagati: −' + eur(t.pag) : ''}`)
-      ),
-      E('div', {},
-        E('small', {}, 'TOTALE RICARICHE'),
-        E('b', {}, eur(shiftStats.totRicariche))
-      ),
-      E('div', {},
-        E('small', {}, 'TOTALE SCOMMESSE (Giocate − Vinte)'),
-        E('b', {class: shiftStats.totScommesseNetto >= 0 ? 'pos' : 'neg'}, 
-          (shiftStats.totScommesseNetto > 0 ? '+' : '') + eur(shiftStats.totScommesseNetto)
+
+    // SEZIONE 1: CASSA & VOLUME DEL TURNO
+    E('div', {style:'margin-bottom:16px'},
+      E('small', {class:'mu', style:'font-weight:bold;letter-spacing:0.5px;display:block;margin-bottom:6px'}, '1. CASSA & VOLUME DEL TURNO'),
+      E('div', {class:'k'},
+        E('div', {style:'background:#2b7a4b;color:#fff'},
+          E('small', {}, '💵 CASSETTO (CONTANTE IN CASSA)'),
+          E('b', {style:'font-size:24px'}, eur(t.teo)),
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(incassoCassettoNetto)}`)
         ),
-        E('small', {class:'mu', style:'font-size:11px'}, `Giocate: ${eur(shiftStats.scommesseGiocate)} · Vinte: ${eur(shiftStats.scommesseVinte)}`)
-      ),
-      E('div', {},
-        E('small', {}, 'TOTALE DEBITI TURNO'),
-        E('b', {class:'neg'}, eur(shiftStats.totDebiti))
-      ),
-      E('div', {},
-        E('small', {}, 'TOTALE ACCREDITI TURNO'),
-        E('b', {class:'pos'}, eur(shiftStats.totAccrediti))
+        E('div', {style:'background:#1e3a8a;color:#fff'},
+          E('small', {}, '📊 TOTALE CERCHIO TURNO (PARTE DA 0 €)'),
+          E('b', {style:'font-size:24px'}, eur(totaleCerchioTurno)),
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Debiti Turno (${eur(shiftStats.totDebiti)}) + Incasso Cassetto (${eur(incassoCassettoNetto)})`)
+        )
       )
     ),
-    E('div', {class:'f'},
+
+    // SEZIONE 2: ESPOSIZIONE DEBITI CLIENTI
+    E('div', {style:'margin-bottom:16px'},
+      E('small', {class:'mu', style:'font-weight:bold;letter-spacing:0.5px;display:block;margin-bottom:6px'}, '2. ESPOSIZIONE DEBITI CLIENTI'),
+      E('div', {class:'k'},
+        E('div', {style:'background:#b3261e;color:#fff;grid-column:1/-1'},
+          E('small', {}, '🚨 TOTALE DEBITI CLIENTI COMPLESSIVO (STORICO ALL-TIME)'),
+          E('b', {style:'font-size:24px'}, eur(totDebitiAllTime)),
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, 'Somma totale di tutti i debiti ancora da riscuotere da tutti i clienti')
+        ),
+        E('div', {},
+          E('small', {}, '⚠️ DEBITI CREATI IN QUESTO TURNO'),
+          E('b', {class:'neg'}, eur(shiftStats.totDebiti))
+        ),
+        E('div', {},
+          E('small', {}, '🎁 ACCREDITI / VINCITE TURNO'),
+          E('b', {class:'pos'}, eur(shiftStats.totAccrediti))
+        )
+      )
+    ),
+
+    E('div', {class:'f', style:'margin-bottom:16px'},
       E('button', {class:'b', onclick: apriModalNuovoClienteBet}, '+ Aggiungi Cliente'),
       E('button', {class:'b r', style:'margin-left:auto', onclick: chiudiBet}, 'Chiudi Cassa')
     ),
 
-    E('h3', {style:'margin-top:20px'}, 'Clienti & Saldi Individuali')
+    // --- TITOLO SEZIONE CLIENTI & SALDI ---
+    E('h3', {style:'margin-top:20px;margin-bottom:8px'}, 'Clienti & Saldi Individuali'),
+
+    // --- MINI DASHBOARD SOTTO AL TITOLO: TOTALE DEBITI E TOTALE CREDITI ---
+    E('div', {class:'k', style:'margin-bottom:14px;grid-template-columns:1fr 1fr'},
+      E('div', {style:'border:1px solid var(--bd);background:rgba(179,38,30,0.06);border-radius:10px;padding:10px'},
+        E('small', {style:'color:var(--bd);font-weight:bold'}, '🔴 TOTALE DEBITI CLIENTI'),
+        E('b', {class:'neg', style:'font-size:20px;display:block;margin-top:2px'}, eur(totDebitiAllTime)),
+        E('small', {class:'mu', style:'font-size:11px'}, 'Somma totale saldi a debito')
+      ),
+      E('div', {style:'border:1px solid var(--ok);background:rgba(43,122,75,0.06);border-radius:10px;padding:10px'},
+        E('small', {style:'color:var(--ok);font-weight:bold'}, '🟢 TOTALE CREDITI CLIENTI'),
+        E('b', {class:'pos', style:'font-size:20px;display:block;margin-top:2px'}, eur(totCreditiAllTime)),
+        E('small', {class:'mu', style:'font-size:11px'}, 'Somma totale saldi a credito')
+      )
+    )
   );
 
-  // BARRA DI RICERCA REGISTRO
+  // --- BARRA DI RICERCA CLIENTI ---
   const searchInput = E('input', {
     type: 'search',
     placeholder: '🔍 Cerca cliente per nome...',
     v: F.sBet || '',
-    style: 'width:100%;padding:12px;margin:12px 0 16px;border-radius:10px;border:1px solid var(--ln);background:var(--cd);color:var(--fg);font-size:16px;font-weight:600;',
+    style: 'width:100%;padding:12px;margin-bottom:16px;border-radius:10px;border:1px solid var(--ln);background:var(--cd);color:var(--fg);font-size:16px;font-weight:600;',
     oninput: (e) => {
       F.sBet = e.target.value.toLowerCase();
       renderClients();
