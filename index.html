@@ -644,10 +644,11 @@ function getBetStatsShift(s){
     if (m.tipo === 'debito') {
       totDebiti += m.imp;
       if (!isRicarica) scommesseGiocate += m.imp;
-    } else if (m.tipo === 'accredito' || m.tipo === 'paga') {
+    } else if (m.tipo === 'accredito') {
       totAccrediti += m.imp;
       if (!isRicarica) scommesseVinte += m.imp;
-      if (m.tipo === 'paga') totPaga += m.imp;
+    } else if (m.tipo === 'paga') {
+      totPaga += m.imp;
     } else if (m.tipo === 'incasso_debito') {
       totDebiti -= m.imp;
     }
@@ -668,18 +669,20 @@ function getBetStatsShift(s){
 function getBetClientStats(clientName){
   const activeShift = curBet();
   const movs = (S.bet_mov || []).filter(x => x.cliente && x.cliente.trim().toLowerCase() === clientName.trim().toLowerCase());
-  let deb = 0, inc = 0, acc = 0, currAcc = 0;
+  let deb = 0, inc = 0, acc = 0, pag = 0, currAcc = 0;
   movs.forEach(m => {
     if (m.tipo === 'debito') deb += m.imp;
     else if (m.tipo === 'incasso_debito') inc += m.imp;
-    else if (m.tipo === 'accredito' || m.tipo === 'paga') {
+    else if (m.tipo === 'accredito') {
       acc += m.imp;
       if (activeShift && m.s === activeShift.id) {
         currAcc += m.imp;
       }
+    } else if (m.tipo === 'paga') {
+      pag += m.imp;
     }
   });
-  const saldoNetto = deb - inc - acc;
+  const saldoNetto = (deb + pag) - (inc + acc);
   const debitoResiduo = Math.max(0, saldoNetto);
   return { saldoNetto, debitoResiduo, totAccrediti: currAcc };
 }
