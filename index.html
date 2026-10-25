@@ -31,6 +31,7 @@ input,select,textarea{font:inherit;padding:10px;border:1px solid var(--ln);borde
 .storico-item:last-child{border-bottom:0}
 .tag-danilo{background:#e27a4c;color:#fff;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:bold;display:inline-block;margin-left:4px}
 .test-banner{background:#d9381e;color:#fff;text-align:center;padding:6px 10px;font-size:13px;font-weight:bold;letter-spacing:0.5px}
+.dash-section-title{font-size:13px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 6px 2px}
 </style></head><body><div id="app"></div>
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
@@ -854,39 +855,53 @@ function scommesse(m) {
   const debitiTurno = s ? shiftStats.totDebiti : 0;
   const totaleCerchio = debitiTurno + incassoCassettoShift;
 
-  const cardDashboard = E('div', {class:'k', style:'margin-bottom:12px'},
-    E('div', {class:'w', style:'background:#1a4d2e'},
-      E('small', {}, '⭕ TOTALE CERCHIO TURNO'),
-      E('b', {style:'font-size:26px'}, eur(totaleCerchio)),
-      E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Parte da 0,00 € ad ogni turno · Debiti Turno (${eur(debitiTurno)}) + Incasso Cassetto (${eur(incassoCassettoShift)})`)
+  m.append(
+    E('div', {class:'dash-section-title'}, '💵 1. CASSA & VOLUME DEL TURNO'),
+    E('div', {class:'k', style:'margin-bottom:14px'},
+      s ? E('div', {class:'w', style:'background:#2b7a4b'},
+        E('small', {}, '💵 CASSETTO (CONTANTE IN CASSA)'),
+        E('b', {style:'font-size:26px'}, eur(t.teo)),
+        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: ${incassoCassettoShift >= 0 ? '+' : ''}${eur(incassoCassettoShift)}`)
+      ) : null,
+      E('div', {class:'w', style:'background:#1a4d2e'},
+        E('small', {}, '⭕ TOTALE CERCHIO TURNO (PARTE DA 0 €)'),
+        E('b', {style:'font-size:24px'}, eur(totaleCerchio)),
+        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Debiti Turno (${eur(debitiTurno)}) + Incasso Cassetto (${eur(incassoCassettoShift)})`)
+      )
     ),
-    s ? E('div', {class:'w', style:'background:#2b7a4b'},
-      E('small', {}, '💵 CASSETTO (CONTANTE IN CASSA)'),
-      E('b', {style:'font-size:24px'}, eur(t.teo)),
-      E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo init: ${eur(s.fondo)} · Incassi netti: ${incassoCassettoShift >= 0 ? '+' : ''}${eur(incassoCassettoShift)}`)
-    ) : null,
-    E('div', {},
-      E('small', {}, 'TOTALE DEBITI CLIENTI (COMPLESSIVO)'),
-      E('b', {class:'neg'}, eur(totDebitiClientiGenerale))
-    ),
-    E('div', {},
-      E('small', {}, 'TOTALE RICARICHE TURNO'),
-      E('b', {}, eur(shiftStats.totRicariche))
-    ),
-    E('div', {},
-      E('small', {}, 'TOTALE SCOMMESSE (Giocate − Vinte)'),
-      E('b', {class: shiftStats.totScommesseNetto >= 0 ? 'pos' : 'neg'}, 
-        (shiftStats.totScommesseNetto > 0 ? '+' : '') + eur(shiftStats.totScommesseNetto)
+
+    E('div', {class:'dash-section-title'}, '🔴 2. ESPOSIZIONE DEBITI CLIENTI'),
+    E('div', {class:'k', style:'margin-bottom:14px'},
+      E('div', {class:'w', style:'background:#8b1e17'},
+        E('small', {}, '🔴 TOTALE DEBITI CLIENTI COMPLESSIVO (STORICO ALL-TIME)'),
+        E('b', {style:'font-size:24px;color:#fff'}, eur(totDebitiClientiGenerale)),
+        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, 'Somma totale di tutti i debiti ancora da riscuotere da tutti i clienti')
       ),
-      E('small', {class:'mu', style:'font-size:11px'}, `Giocate: ${eur(shiftStats.scommesseGiocate)} · Vinte: ${eur(shiftStats.scommesseVinte)}`)
+      E('div', {},
+        E('small', {}, '⚠️ DEBITI CREATI IN QUESTO TURNO'),
+        E('b', {class:'neg'}, eur(debitiTurno))
+      ),
+      E('div', {},
+        E('small', {}, '🎁 ACCREDITI / VINCITE TURNO'),
+        E('b', {class:'pos'}, eur(shiftStats.totAccrediti))
+      )
     ),
-    E('div', {},
-      E('small', {}, 'TOTALE ACCREDITI TURNO'),
-      E('b', {class:'pos'}, eur(shiftStats.totAccrediti))
+
+    E('div', {class:'dash-section-title'}, '📱 3. MOVIMENTI SCOMMESSE TURNO'),
+    E('div', {class:'k', style:'margin-bottom:16px'},
+      E('div', {},
+        E('small', {}, '📲 TOTALE RICARICHE TURNO'),
+        E('b', {}, eur(shiftStats.totRicariche))
+      ),
+      E('div', {},
+        E('small', {}, '🎲 SCOMMESSE NETTE (Giocate − Vinte)'),
+        E('b', {class: shiftStats.totScommesseNetto >= 0 ? 'pos' : 'neg'}, 
+          (shiftStats.totScommesseNetto > 0 ? '+' : '') + eur(shiftStats.totScommesseNetto)
+        ),
+        E('small', {class:'mu', style:'font-size:11px'}, `Giocate: ${eur(shiftStats.scommesseGiocate)} · Vinte: ${eur(shiftStats.scommesseVinte)}`)
+      )
     )
   );
-
-  m.append(cardDashboard);
 
   if (!s) {
     m.append(
