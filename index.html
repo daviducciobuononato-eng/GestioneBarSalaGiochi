@@ -376,10 +376,10 @@ function render(){
  const views = {v:vendita,t:turno,c:clienti,s:storico,a:admin,k:scommesse};
  (views[tab]||vendita)(m,s);
  a.append(E('nav',{},[
-   ['v','Cassa'],
+   ['v','CASSA'],
    ['t','Turno'],
    ['c','Clienti'],
-   isBetUser()&&['k','Registro'],
+   isBetUser()&&['k','REGISTRO'],
    can('storico')&&['s','Storico'],
    can('catalogo')&&['a','Gestione']
  ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))
@@ -767,14 +767,14 @@ function chiudiBet(){
   };
   d.textContent = 'Differenza: –';
 
-  modal('Chiusura cassa', E('div', {},
+  modal('Chiusura turno', E('div', {},
     E('div', {class:'row'}, 'CASSETTO', E('b', {}, eur(t.teo))),
     fl('Contante réellement contato (€)', r),
     E('div', {style:'margin:8px 0'}, d),
     fl('Nota', n)
   ), [
     ['Annulla', null, 'g'],
-    ['Chiudi e azzera cassa', () => {
+    ['Chiudi e azzera turno', () => {
       if (!r.value) { alert('Inserisci il contante contato'); return false; }
       const re = par(r.value);
       Object.assign(s, { ch: Date.now(), chn: me.nome, chiusa: me.id, reale: re, teo: t.teo, diff: re - t.teo, nota: n.value.trim() });
@@ -888,7 +888,7 @@ function scommesse(m) {
         E('button', {class:'b', onclick: apriModalNuovoClienteBet}, '+ Cliente'),
         E('button', {class:'b g', onclick: () => movBet('entrata')}, '+ Entrata'),
         E('button', {class:'b g', onclick: () => movBet('uscita')}, '− Uscita'),
-        E('button', {class:'b r', style:'margin-left:auto', onclick: chiudiBet}, 'Chiudi Cassa')
+        E('button', {class:'b r', style:'margin-left:auto', onclick: chiudiBet}, 'Chiudi Turno')
       )
     );
   }
@@ -1261,6 +1261,10 @@ function admin(m){
  }
 }
 
+boot();
+</script>
+</body>
+</html>
 boot();
 </script>
 </body>
