@@ -843,65 +843,6 @@ function scommesse(m) {
 
   const s = curBet();
   const shiftStats = getBetStatsShift(s);
-  const t = s ? totBet(s) : { teo: 0, cassaIn: 0, pag: 0, en: 0, us: 0 };
-
-  const betClients = S.clienti.filter(x => x.tipo === 'bet');
-  const totDebitiClientiGenerale = betClients.reduce((acc, c) => {
-    const st = getBetClientStats(c.nome);
-    return acc + (st.saldoNetto > 0 ? st.saldoNetto : 0);
-  }, 0);
-
-  const incassoCassettoShift = s ? (t.teo - s.fondo) : 0;
-  const debitiTurno = s ? shiftStats.totDebiti : 0;
-  const totaleCerchio = debitiTurno + incassoCassettoShift;
-
-  m.append(
-    E('div', {class:'dash-section-title'}, '💵 1. CASSA & VOLUME DEL TURNO'),
-    E('div', {class:'k', style:'margin-bottom:14px'},
-      s ? E('div', {class:'w', style:'background:#2b7a4b'},
-        E('small', {}, '💵 CASSETTO (CONTANTE IN CASSA)'),
-        E('b', {style:'font-size:26px'}, eur(t.teo)),
-        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: ${incassoCassettoShift >= 0 ? '+' : ''}${eur(incassoCassettoShift)}`)
-      ) : null,
-      E('div', {class:'w', style:'background:#1a4d2e'},
-        E('small', {}, '⭕ TOTALE CERCHIO TURNO (PARTE DA 0 €)'),
-        E('b', {style:'font-size:24px'}, eur(totaleCerchio)),
-        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Debiti Turno (${eur(debitiTurno)}) + Incasso Cassetto (${eur(incassoCassettoShift)})`)
-      )
-    ),
-
-    E('div', {class:'dash-section-title'}, '🔴 2. ESPOSIZIONE DEBITI CLIENTI'),
-    E('div', {class:'k', style:'margin-bottom:14px'},
-      E('div', {class:'w', style:'background:#8b1e17'},
-        E('small', {}, '🔴 TOTALE DEBITI CLIENTI COMPLESSIVO (STORICO ALL-TIME)'),
-        E('b', {style:'font-size:24px;color:#fff'}, eur(totDebitiClientiGenerale)),
-        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, 'Somma totale di tutti i debiti ancora da riscuotere da tutti i clienti')
-      ),
-      E('div', {},
-        E('small', {}, '⚠️ DEBITI CREATI IN QUESTO TURNO'),
-        E('b', {class:'neg'}, eur(debitiTurno))
-      ),
-      E('div', {},
-        E('small', {}, '🎁 ACCREDITI / VINCITE TURNO'),
-        E('b', {class:'pos'}, eur(shiftStats.totAccrediti))
-      )
-    ),
-
-    E('div', {class:'dash-section-title'}, '📱 3. MOVIMENTI SCOMMESSE TURNO'),
-    E('div', {class:'k', style:'margin-bottom:16px'},
-      E('div', {},
-        E('small', {}, '📲 TOTALE RICARICHE TURNO'),
-        E('b', {}, eur(shiftStats.totRicariche))
-      ),
-      E('div', {},
-        E('small', {}, '🎲 SCOMMESSE NETTE (Giocate − Vinte)'),
-        E('b', {class: shiftStats.totScommesseNetto >= 0 ? 'pos' : 'neg'}, 
-          (shiftStats.totScommesseNetto > 0 ? '+' : '') + eur(shiftStats.totScommesseNetto)
-        ),
-        E('small', {class:'mu', style:'font-size:11px'}, `Giocate: ${eur(shiftStats.scommesseGiocate)} · Vinte: ${eur(shiftStats.scommesseVinte)}`)
-      )
-    )
-  );
 
   if (!s) {
     m.append(
@@ -909,38 +850,89 @@ function scommesse(m) {
         E('b', {}, 'Nessun turno aperto'),
         E('p', {class:'mu'}, 'Per inserire addebiti, incassi o vincite occorre prima aprire un turno separato con il relativo fondo cassa.'),
         E('button', {class:'b', style:'margin-top:8px', onclick: apriBet}, 'Apri Turno e Imposta Fondo Cassa')
-      )
-    );
-  } else {
-    m.append(
-      E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
-        E('div', {class:'row', style:'border:0;padding:0'},
-          E('b', {}, `Turno Scommesse ${tnBet(s.id)} (Aperto)`),
-          E('span', {class:'mu sm'}, dt(s.ap))
-        ),
-        E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da: ${s.dan}`)
       ),
-      E('div', {class:'f'},
-        E('button', {class:'b', onclick: apriModalNuovoClienteBet}, '+ Cliente'),
-        E('button', {class:'b g', onclick: () => movBet('entrata')}, '+ Entrata'),
-        E('button', {class:'b g', onclick: () => movBet('uscita')}, '− Uscita'),
-        E('button', {class:'b r', style:'margin-left:auto', onclick: chiudiBet}, 'Chiudi Turno')
-      )
+      E('h3', {style:'margin-top:16px'}, 'Registro movimenti'),
+      opsScommesse()
     );
+    return;
   }
 
-  m.append(E('h3', {style:'margin-top:20px'}, 'Clienti & Saldi Individuali'));
+  const t = totBet(s);
+  m.append(
+    E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
+      E('div', {class:'row', style:'border:0;padding:0'},
+        E('b', {}, `Turno Scommesse ${tnBet(s.id)} (Aperto)`),
+        E('span', {class:'mu sm'}, dt(s.ap))
+      ),
+      E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da: ${s.dan}`)
+    ),
+    E('div', {class:'k', style:'margin-bottom:12px'},
+      E('div', {style:'background:#2b7a4b'},
+        E('small', {}, 'CASSETTO'),
+        E('b', {style:'font-size:24px'}, eur(t.teo)),
+        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo init: ${eur(s.fondo)} · Incassi: +${eur(t.cassaIn)}${t.pag > 0 ? ' · Pagati: −' + eur(t.pag) : ''}`)
+      ),
+      E('div', {},
+        E('small', {}, 'TOTALE RICARICHE'),
+        E('b', {}, eur(shiftStats.totRicariche))
+      ),
+      E('div', {},
+        E('small', {}, 'TOTALE SCOMMESSE (Giocate − Vinte)'),
+        E('b', {class: shiftStats.totScommesseNetto >= 0 ? 'pos' : 'neg'}, 
+          (shiftStats.totScommesseNetto > 0 ? '+' : '') + eur(shiftStats.totScommesseNetto)
+        ),
+        E('small', {class:'mu', style:'font-size:11px'}, `Giocate: ${eur(shiftStats.scommesseGiocate)} · Vinte: ${eur(shiftStats.scommesseVinte)}`)
+      ),
+      E('div', {},
+        E('small', {}, 'TOTALE DEBITI TURNO'),
+        E('b', {class:'neg'}, eur(shiftStats.totDebiti))
+      ),
+      E('div', {},
+        E('small', {}, 'TOTALE ACCREDITI TURNO'),
+        E('b', {class:'pos'}, eur(shiftStats.totAccrediti))
+      )
+    ),
+    E('div', {class:'f'},
+      E('button', {class:'b', onclick: apriModalNuovoClienteBet}, '+ Aggiungi Cliente'),
+      E('button', {class:'b r', style:'margin-left:auto', onclick: chiudiBet}, 'Chiudi Cassa')
+    ),
 
-  if (!betClients.length) {
-    m.append(E('div', {class:'cd mu'}, 'Nessun cliente registrato. I nuovi clienti appariranno qui automaticamente.'));
-  } else {
+    E('h3', {style:'margin-top:20px'}, 'Clienti & Saldi Individuali')
+  );
+
+  // BARRA DI RICERCA REGISTRO
+  const searchInput = E('input', {
+    type: 'search',
+    placeholder: '🔍 Cerca cliente per nome...',
+    v: F.sBet || '',
+    style: 'width:100%;padding:12px;margin:12px 0 16px;border-radius:10px;border:1px solid var(--ln);background:var(--cd);color:var(--fg);font-size:16px;font-weight:600;',
+    oninput: (e) => {
+      F.sBet = e.target.value.toLowerCase();
+      renderClients();
+    }
+  });
+  m.append(searchInput);
+
+  const clientsContainer = E('div', {id: 'bet-clients-container'});
+  m.append(clientsContainer);
+
+  function renderClients() {
+    clientsContainer.innerHTML = '';
+    const query = (F.sBet || '').trim();
+    const betClients = S.clienti.filter(x => x.tipo === 'bet' && (!query || x.nome.toLowerCase().includes(query)));
+    
+    if (!betClients.length) {
+      clientsContainer.append(E('div', {class:'cd mu'}, query ? 'Nessun cliente trovato con questo nome.' : 'Nessun cliente registrato.'));
+      return;
+    }
+
     const list = [...betClients].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
     list.forEach(c => {
       const st = getBetClientStats(c.nome);
       let saldoText = st.saldoNetto > 0 ? `Debito Residuo: ${eur(st.saldoNetto)}` : st.saldoNetto < 0 ? `Credito: +${eur(Math.abs(st.saldoNetto))}` : `Debito Residuo: 0,00 €`;
       let saldoClass = st.saldoNetto > 0 ? 'neg' : st.saldoNetto < 0 ? 'pos' : 'mu';
 
-      m.append(
+      clientsContainer.append(
         E('div', {class:'cd'},
           E('div', {class:'row', style:'border:0'},
             E('div', {}, E('b', {style:'font-size:16px'}, c.nome)),
@@ -953,46 +945,20 @@ function scommesse(m) {
             E('button', {class:'b g s', onclick: () => apriModalScommessa('debito', c.id)}, '+ Debito'),
             E('button', {class:'b g s', onclick: () => apriModalScommessa('accredito', c.id)}, '+ Accredito'),
             E('button', {class:'b g s', onclick: () => apriModalScommessa('incasso', c.id)}, '− Incassa'),
-            E('button', {class:'b r s', onclick: () => apriModalScommessa('paga', c.id)}, 'Paga dal cassetto'),
-            st.saldoNetto === 0 ? E('button', {class:'b g s neg', style:'margin-left:auto', onclick: () => {
-              if (confirm(`Eliminare il cliente scommesse ${c.nome}?`)) {
-                S.clienti = S.clienti.filter(x => x !== c);
-                log('Cliente scommesse eliminato', 'cliente', c.nome);
-                save();
-                toast('Cliente scommesse eliminato');
-                render();
-              }
-            }}, 'Elimina') : null
+            E('button', {class:'b r s', onclick: () => apriModalScommessa('paga', c.id)}, '💸 Paga')
           )
         )
       );
     });
   }
 
-  m.append(
-    E('h3', {style:'margin-top:20px'}, '📋 Turni (Storico & Report)'),
-    ...(S.bet_ses || []).length ? [...S.bet_ses].reverse().map(sb => {
-      const tb = totBet(sb);
-      return E('div', {class:'cd'},
-        E('div', {class:'row', style:'border:0'},
-          E('b', {}, `Turno ${tnBet(sb.id)}${sb.ch ? '' : ' (aperto)'}`),
-          E('span', {class:'mu sm'}, dt(sb.ap))
-        ),
-        E('div', {class:'sm'}, `Fondo ${eur(sb.fondo)} · Teorico ${eur(tb.teo)}` + (sb.ch ? ` · Contato ${eur(sb.reale)}` : '')),
-        sb.ch ? E('b', {class: sb.diff < 0 ? 'neg' : sb.diff > 0 ? 'pos' : '', style:'display:block;margin-top:2px'}, 'Differenza ' + eur(sb.diff)) : null,
-        E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da ${sb.dan}${sb.ch ? ' · chiuso da ' + sb.chn + ' il ' + dt(sb.ch) + (sb.nota ? ' · ' + sb.nota : '') : ''}`),
-        E('div', {class:'f', style:'margin-top:8px'},
-          E('button', {class:'b g s', onclick: () => mostraOperazioniTurnoBet(sb)}, 'Vedi operazioni & report'),
-          (can('storico') || me?.ruolo === 'prop') ? E('button', {class:'b r s', onclick: () => deleteBetSes(sb.id)}, '🗑️ Elimina') : null
-        )
-      );
-    }) : [E('div', {class:'cd mu'}, 'Nessun turno in archivio.')],
+  renderClients();
 
-    E('h3', {style:'margin-top:20px'}, 'Registro Movimenti Generali'),
+  m.append(
+    E('h3', {style:'margin-top:20px'}, 'Registro Movimenti'),
     opsScommesse()
   );
 }
-
 function opsScommesse(shiftId = null){
   let list = [...(S.bet_mov || [])];
   if (shiftId) {
