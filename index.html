@@ -367,7 +367,7 @@ function render(){
  }
 
  a.append(E('header',{},
-   E('b',{},'🍺 Bar & Scommesse',E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno aperto dal '+dt(s.ap):'Nessun turno aperto'}`)),
+   E('b',{},'🍺 Bar',E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno aperto dal '+dt(s.ap):'Nessun turno aperto'}`)),
    isDavide()?E('button',{class:isTestMode?'b r s':'b g s',style:isTestMode?'background:#d9381e;color:#fff':'border-color:#b4471f;color:#b4471f;font-weight:bold',onclick:toggleTestMode},isTestMode?'← Dati Reali':'🧪 Test Mode'):null,
    E('button',{class:'b g s',onclick:cambioPin},'PIN'),
    E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')
@@ -379,7 +379,7 @@ function render(){
    ['v','Cassa'],
    ['t','Turno'],
    ['c','Clienti'],
-   isBetUser()&&['k','Registro Scommesse'],
+   isBetUser()&&['k','Registro'],
    can('storico')&&['s','Storico'],
    can('catalogo')&&['a','Gestione']
  ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))))
@@ -408,7 +408,7 @@ function turno(m,s){
    ['Uscite manuali',-t.us],
    ['Incassi debiti (solo informativo)',t.incDeb],
    ['Debiti (solo informativo)',t.totDebitiCreati]
- ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CONTANTE TEORICO IN CASSA'),E('b',{style:'font-size:26px'},eur(t.teo)))));
+ ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CASSETTO'),E('b',{style:'font-size:26px'},eur(t.teo)))));
  if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
 
@@ -654,15 +654,15 @@ function getBetClientStats(clientName){
 }
 
 function apriBet(){
-  form('Apri Turno Scommesse', [{l:'Fondo cassa iniziale scommesse (€)', k:'f', m:'decimal', v:'100,00'}], v => {
+  form('Apri Turno', [{l:'Fondo cassa iniziale (€)', k:'f', m:'decimal', v:'100,00'}], v => {
     const f = par(v.f);
     if (f < 0) return false;
     const s = { id: nid('bt'), da: me.id, dan: me.nome, ap: Date.now(), fondo: f, ch: null };
     S.bet_ses = S.bet_ses || [];
     S.bet_ses.push(s);
-    log('Apertura turno scommesse', 'turno ' + tnBet(s.id), 'Fondo ' + eur(f));
+    log('Apertura turno', 'turno ' + tnBet(s.id), 'Fondo ' + eur(f));
     save();
-    toast('Turno scommesse aperto con fondo ' + eur(f));
+    toast('Turno aperto con fondo ' + eur(f));
     render();
   });
 }
@@ -681,20 +681,20 @@ function chiudiBet(){
   };
   d.textContent = 'Differenza: –';
 
-  modal('Chiusura Cassa Scommesse', E('div', {},
-    E('div', {class:'row'}, 'Contante teorico cassa scommesse', E('b', {}, eur(t.teo))),
+  modal('Chiusura cassa', E('div', {},
+    E('div', {class:'row'}, 'CASSETTO', E('b', {}, eur(t.teo))),
     fl('Contante réellement contato (€)', r),
     E('div', {style:'margin:8px 0'}, d),
     fl('Nota', n)
   ), [
     ['Annulla', null, 'g'],
-    ['Chiudi e azzera cassa scommesse', () => {
+    ['Chiudi e azzera cassa', () => {
       if (!r.value) { alert('Inserisci il contante contato'); return false; }
       const re = par(r.value);
       Object.assign(s, { ch: Date.now(), chn: me.nome, chiusa: me.id, reale: re, teo: t.teo, diff: re - t.teo, nota: n.value.trim() });
-      log('Chiusura turno scommesse', 'turno ' + tnBet(s.id), `Teorico ${eur(t.teo)}, contato ${eur(re)}, diff ${eur(re - t.teo)}`);
+      log('Chiusura turno', 'turno ' + tnBet(s.id), `Teorico ${eur(t.teo)}, contato ${eur(re)}, diff ${eur(re - t.teo)}`);
       save();
-      toast('Turno scommesse chiuso. Differenza: ' + eur(s.diff));
+      toast('Turno chiuso. Differenza: ' + eur(s.diff));
       render();
     }, 'r']
   ]);
@@ -713,10 +713,10 @@ function scommesse(m) {
     m.append(
       E('div', {class:'cd'},
         E('b', {}, 'Nessun turno aperto'),
-        E('p', {class:'mu'}, 'Per inserire addebiti, incassi o vincite scommesse occorre prima aprire un turno scommesse separato con il relativo fondo cassa.'),
+        E('p', {class:'mu'}, 'Per inserire addebiti, incassi o vincite occorre prima aprire un turno separato con il relativo fondo cassa.'),
         E('button', {class:'b', style:'margin-top:8px', onclick: apriBet}, 'Apri Turno e Imposta Fondo Cassa')
       ),
-      E('h3', {style:'margin-top:16px'}, 'Registro Movimenti Scommesse'),
+      E('h3', {style:'margin-top:16px'}, 'Registro movimenti'),
       opsScommesse()
     );
     return;
@@ -758,7 +758,7 @@ function scommesse(m) {
 
   const betClients = S.clienti.filter(x => x.tipo === 'bet');
   if (!betClients.length) {
-    m.append(E('div', {class:'cd mu'}, 'Nessun cliente scommesse registrato. I nuovi clienti appariranno qui automaticamente quando registri una scommessa.'));
+    m.append(E('div', {class:'cd mu'}, 'Nessun cliente registrato. I nuovi clienti appariranno qui automaticamente.'));
   } else {
     const list = [...betClients].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
     list.forEach(c => {
@@ -786,7 +786,7 @@ function scommesse(m) {
   }
 
   m.append(
-    E('h3', {style:'margin-top:20px'}, 'Registro Movimenti Scommesse'),
+    E('h3', {style:'margin-top:20px'}, 'Registro Movimenti'),
     opsScommesse()
   );
 }
@@ -795,7 +795,7 @@ function opsScommesse(){
   const list = [...(S.bet_mov || [])].sort((a,b) => b.t - a.t);
   const container = E('div', {});
   if (!list.length) {
-    container.append(E('div', {class:'cd mu'}, 'Nessun movimento scommesse registrato.'));
+    container.append(E('div', {class:'cd mu'}, 'Nessun movimento registrato.'));
     return container;
   }
   list.forEach(x => {
@@ -808,7 +808,7 @@ function opsScommesse(){
         E('b', {}, `${label} · ${x.cliente}`),
         E('b', {class: badgeClass}, eur(x.imp))
       ),
-      E('div', {class:'sm mu'}, `🗓️ ${dtFull(x.t)} · Op: ${x.opn || '–'} · Turno Scommesse: ${x.sNum || '#1'}`),
+      E('div', {class:'sm mu'}, `🗓️ ${dtFull(x.t)} · Op: ${x.opn || '–'} · Turno: ${x.sNum || '#1'}`),
       E('div', {class:'sm'}, `Causale: ${x.causale || '–'}`),
       x.daniloNoCassa ? E('div', {class:'tag-danilo', style:'margin-top:4px'}, '👤 INCASSATO DA DANILO (NON IN CASSA)') : null
     ));
@@ -819,7 +819,7 @@ function opsScommesse(){
 function apriModalScommessa(tipoOp, preselectedClientId=null) {
   const activeShift = curBet();
   if(!activeShift){
-    alert('Impossibile registrare: nessun turno scommesse aperto! Apri prima il turno scommesse.');
+    alert('Impossibile registrare: nessun turno aperto! Apri prima il turno.');
     return false;
   }
 
@@ -827,15 +827,12 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
   const sortedClients = [...betClients].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
   const optsClients = [['NEW', 'CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
   const causaliPreset = tipoOp === 'debito' ? [
-    ['Scommessa Sportiva', 'Scommessa Sportiva'],
-    ['Virtual', 'Virtual Games'],
-    ['Slot / VLT', 'Slot / VLT'],
+    ['Biglietto', 'Biglietto'],
     ['Ricarica Conto Gioco', 'Ricarica Conto Gioco'],
     ['MANUALE', 'Altra causale manuale...']
   ] : [
     ['Vincita Scommessa', 'Vincita Scommessa'],
-    ['Bonus / Accredito', 'Bonus / Accredito'],
-    ['Rimborso', 'Rimborso'],
+    ['Prelievo conto gioco', 'Prelievo conto gioco'],
     ['MANUALE', 'Altra causale manuale...']
   ];
 
