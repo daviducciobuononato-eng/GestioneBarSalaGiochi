@@ -630,40 +630,60 @@ function totBet(s){
 }
 
 function getBetStatsShift(s){
-  if(!s) return { totDebiti: 0, totAccrediti: 0, totRicariche: 0, totScommesseNetto: 0, scommesseGiocate: 0, scommesseVinte: 0, totPaga: 0 };
+  if(!s) return { 
+    totDebiti: 0, debitiGiocate: 0, debitiRicariche: 0, 
+    totAccrediti: 0, accreditiVincite: 0, accreditiPrelievi: 0, 
+    totRicariche: 0, totScommesseNetto: 0, scommesseGiocate: 0, scommesseVinte: 0, totPaga: 0, cassaIn: 0 
+  };
+  
   const movs = (S.bet_mov || []).filter(x => x.s === s.id);
-  let totDebiti = 0, totAccrediti = 0, totRicariche = 0, scommesseGiocate = 0, scommesseVinte = 0, totPaga = 0;
+  let totDebiti = 0, debitiGiocate = 0, debitiRicariche = 0;
+  let totAccrediti = 0, accreditiVincite = 0, accreditiPrelievi = 0;
+  let totRicariche = 0, scommesseGiocate = 0, scommesseVinte = 0, totPaga = 0, cassaIn = 0;
   
   movs.forEach(m => {
     const c = (m.causale || '').toLowerCase();
     const isRicarica = c.includes('ricarica');
-
-    if (isRicarica) {
-      totRicariche += m.imp;
-    }
+    const isPrelievo = c.includes('prelievo') || c.includes('conto');
 
     if (m.tipo === 'debito') {
       totDebiti += m.imp;
-      if (!isRicarica) scommesseGiocate += m.imp;
-    } else if (m.tipo === 'accredito') {
+      if (isRicarica) {
+        debitiRicariche += m.imp;
+        totRicariche += m.imp;
+      } else {
+        debitiGiocate += m.imp;
+        scommesseGiocate += m.imp;
+      }
+    } else if (m.tipo === 'accredito' || m.tipo === 'paga') {
       totAccrediti += m.imp;
-      if (!isRicarica) scommesseVinte += m.imp;
-    } else if (m.tipo === 'paga') {
-      totPaga += m.imp;
+      if (isPrelievo) {
+        accreditiPrelievi += m.imp;
+      } else {
+        accreditiVincite += m.imp;
+        scommesseVinte += m.imp;
+      }
+      if (m.tipo === 'paga') totPaga += m.imp;
     } else if (m.tipo === 'incasso_debito') {
-      totDebiti -= m.imp;
+      if (!m.daniloNoCassa) cassaIn += m.imp;
     }
   });
 
   const totScommesseNetto = scommesseGiocate - scommesseVinte;
+
   return { 
-    totDebiti: Math.max(0, totDebiti), 
+    totDebiti, 
+    debitiGiocate, 
+    debitiRicariche, 
     totAccrediti, 
-    totRicariche, 
+    accreditiVincite, 
+    accreditiPrelievi, 
+    totRicariche,
     totScommesseNetto,
     scommesseGiocate,
     scommesseVinte,
-    totPaga
+    totPaga,
+    cassaIn
   };
 }
 
@@ -859,7 +879,7 @@ function scommesse(m) {
 
   const t = totBet(s);
 
-  // Calcolo Debiti e Crediti Complessivi (All-Time) di tutti i clienti del Registro
+  // Calcolo Saldi Complessivi (Debiti e Crediti All-Time) di tutti i clienti
   const betClientsAll = S.clienti.filter(x => x.tipo === 'bet');
   let totDebitiAllTime = 0;
   let totCreditiAllTime = 0;
@@ -872,7 +892,7 @@ function scommesse(m) {
   const incassoCassettoNetto = t.cassaIn - t.pag;
   const totaleCerchioTurno = shiftStats.totDebiti + incassoCassettoNetto;
 
-  // --- DASHBOARD PRINCIPALE COMPLETA ---
+  // --- DASHBOARD OPERATIVA DEL TURNO ---
   m.append(
     E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
       E('div', {class:'row', style:'border:0;padding:0'},
@@ -899,22 +919,29 @@ function scommesse(m) {
       )
     ),
 
-    // SEZIONE 2: ESPOSIZIONE DEBITI CLIENTI
+    // SEZIONE 2: ESPOSIZIONE & MOVIMENTI TURNO
     E('div', {style:'margin-bottom:16px'},
-      E('small', {class:'mu', style:'font-weight:bold;letter-spacing:0.5px;display:block;margin-bottom:6px'}, '2. ESPOSIZIONE DEBITI CLIENTI'),
-      E('div', {class:'k'},
-        E('div', {style:'background:#b3261e;color:#fff;grid-column:1/-1'},
-          E('small', {}, '🚨 TOTALE DEBITI CLIENTI COMPLESSIVO (STORICO ALL-TIME)'),
-          E('b', {style:'font-size:24px'}, eur(totDebitiAllTime)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, 'Somma totale di tutti i debiti ancora da riscuotere da tutti i clienti')
-        ),
+      E('small', {class:'mu', style:'font-weight:bold;letter-spacing:0.5px;display:block;margin-bottom:6px'}, '2. ESPOSIZIONE & MOVIMENTI TURNO'),
+      E('div', {class:'k', style:'grid-template-columns:1fr 1fr'},
         E('div', {},
           E('small', {}, '⚠️ DEBITI CREATI IN QUESTO TURNO'),
-          E('b', {class:'neg'}, eur(shiftStats.totDebiti))
+          E('b', {class:'neg', style:'font-size:20px;display:block;margin-top:2px'}, eur(shiftStats.totDebiti)),
+          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Giocate: ${eur(shiftStats.debitiGiocate)} + Ricariche: ${eur(shiftStats.debitiRicariche)})`)
         ),
         E('div', {},
           E('small', {}, '🎁 ACCREDITI / VINCITE TURNO'),
-          E('b', {class:'pos'}, eur(shiftStats.totAccrediti))
+          E('b', {class:'pos', style:'font-size:20px;display:block;margin-top:2px'}, eur(shiftStats.totAccrediti)),
+          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Vincite scommesse: ${eur(shiftStats.accreditiVincite)} + Prelievi conto: ${eur(shiftStats.accreditiPrelievi)})`)
+        ),
+        E('div', {style:'border-left:3px solid var(--ok);padding-left:8px'},
+          E('small', {}, '📥 ENTRATE MANUALI / INCASSI (+ CASSA)'),
+          E('b', {class:'pos', style:'font-size:18px;display:block;margin-top:2px'}, eur(t.cassaIn)),
+          E('small', {class:'mu', style:'font-size:11px'}, 'Incassi debiti o entrate in cassa')
+        ),
+        E('div', {style:'border-left:3px solid var(--bd);padding-left:8px'},
+          E('small', {}, '📤 USCITE MANUALI / PAGAMENTI (− CASSA)'),
+          E('b', {class:'neg', style:'font-size:18px;display:block;margin-top:2px'}, eur(t.pag)),
+          E('small', {class:'mu', style:'font-size:11px'}, 'Vincite pagate o uscite di cassa')
         )
       )
     ),
@@ -937,7 +964,7 @@ function scommesse(m) {
       E('div', {style:'border:1px solid var(--ok);background:rgba(43,122,75,0.06);border-radius:10px;padding:10px'},
         E('small', {style:'color:var(--ok);font-weight:bold'}, '🟢 TOTALE CREDITI CLIENTI'),
         E('b', {class:'pos', style:'font-size:20px;display:block;margin-top:2px'}, eur(totCreditiAllTime)),
-        E('small', {class:'mu', style:'font-size:11px'}, 'Somma totale saldi a credito')
+        E('small', {style:'font-size:11px'}, 'Somma totale saldi a credito')
       )
     )
   );
