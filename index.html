@@ -842,6 +842,7 @@ function scommesse(m) {
 
   const s = curBet();
   const shiftStats = getBetStatsShift(s);
+  const t = s ? totBet(s) : { teo: 0, cassaIn: 0, pag: 0, en: 0, us: 0 };
 
   const betClients = S.clienti.filter(x => x.tipo === 'bet');
   const totDebitiClienti = betClients.reduce((acc, c) => {
@@ -849,14 +850,26 @@ function scommesse(m) {
     return acc + (st.saldoNetto > 0 ? st.saldoNetto : 0);
   }, 0);
 
-  const cardTotaleDebiti = E('div', {class:'k', style:'margin-bottom:12px'},
-    E('div', {class:'w'},
-      E('small', {}, 'TOTALE DEBITI CLIENTI SCOMMESSE'),
-      E('b', {style:'font-size:24px'}, eur(totDebitiClienti))
+  const totCassetto = s ? t.teo : 0;
+  const totaleCerchio = totDebitiClienti + totCassetto;
+
+  const cardDashboard = E('div', {class:'k', style:'margin-bottom:12px'},
+    E('div', {class:'w', style:'background:#1a4d2e'},
+      E('small', {}, '⭕ TOTALE CERCHIO'),
+      E('b', {style:'font-size:26px'}, eur(totaleCerchio)),
+      E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Totale Debiti (${eur(totDebitiClienti)}) + Incasso Cassetto (${eur(totCassetto)})`)
+    ),
+    E('div', {},
+      E('small', {}, 'TOTALE DEBITI CLIENTI'),
+      E('b', {class:'neg'}, eur(totDebitiClienti))
+    ),
+    E('div', {},
+      E('small', {}, 'INCASSO CASSETTO'),
+      E('b', {class:'pos'}, eur(totCassetto))
     )
   );
 
-  m.append(cardTotaleDebiti);
+  m.append(cardDashboard);
 
   if (!s) {
     m.append(
@@ -867,7 +880,6 @@ function scommesse(m) {
       )
     );
   } else {
-    const t = totBet(s);
     m.append(
       E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
         E('div', {class:'row', style:'border:0;padding:0'},
