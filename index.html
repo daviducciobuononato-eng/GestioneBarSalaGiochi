@@ -605,9 +605,9 @@ function clienti(m,s){
 }
 
 function totBet(s){
-  if(!s) return {deb:0, acc:0, inc:0, cassaIn:0, teo:0};
+  if(!s) return {deb:0, acc:0, inc:0, pag:0, cassaIn:0, teo:0};
   const movs = (S.bet_mov || []).filter(x => x.s === s.id);
-  let deb = 0, acc = 0, inc = 0, cassaIn = 0;
+  let deb = 0, acc = 0, inc = 0, cassaIn = 0, pag = 0;
   movs.forEach(m => {
     if (m.tipo === 'debito') {
       deb += m.imp;
@@ -616,15 +616,17 @@ function totBet(s){
     } else if (m.tipo === 'incasso_debito') {
       inc += m.imp;
       if (!m.daniloNoCassa) cassaIn += m.imp;
+    } else if (m.tipo === 'paga') {
+      pag += m.imp;
     }
   });
-  return { deb, acc, inc, cassaIn, teo: s.fondo + cassaIn };
+  return { deb, acc, inc, pag, cassaIn, teo: s.fondo + cassaIn - pag };
 }
 
 function getBetStatsShift(s){
-  if(!s) return { totDebiti: 0, totAccrediti: 0, totRicariche: 0, totScommesseNetto: 0, scommesseGiocate: 0, scommesseVinte: 0 };
+  if(!s) return { totDebiti: 0, totAccrediti: 0, totRicariche: 0, totScommesseNetto: 0, scommesseGiocate: 0, scommesseVinte: 0, totPaga: 0 };
   const movs = (S.bet_mov || []).filter(x => x.s === s.id);
-  let totDebiti = 0, totAccrediti = 0, totRicariche = 0, scommesseGiocate = 0, scommesseVinte = 0;
+  let totDebiti = 0, totAccrediti = 0, totRicariche = 0, scommesseGiocate = 0, scommesseVinte = 0, totPaga = 0;
   
   movs.forEach(m => {
     const c = (m.causale || '').toLowerCase();
@@ -637,9 +639,10 @@ function getBetStatsShift(s){
     if (m.tipo === 'debito') {
       totDebiti += m.imp;
       if (!isRicarica) scommesseGiocate += m.imp;
-    } else if (m.tipo === 'accredito') {
+    } else if (m.tipo === 'accredito' || m.tipo === 'paga') {
       totAccrediti += m.imp;
       if (!isRicarica) scommesseVinte += m.imp;
+      if (m.tipo === 'paga') totPaga += m.imp;
     } else if (m.tipo === 'incasso_debito') {
       totDebiti -= m.imp;
     }
@@ -652,7 +655,8 @@ function getBetStatsShift(s){
     totRicariche, 
     totScommesseNetto,
     scommesseGiocate,
-    scommesseVinte
+    scommesseVinte,
+    totPaga
   };
 }
 
@@ -663,7 +667,7 @@ function getBetClientStats(clientName){
   movs.forEach(m => {
     if (m.tipo === 'debito') deb += m.imp;
     else if (m.tipo === 'incasso_debito') inc += m.imp;
-    else if (m.tipo === 'accredito') {
+    else if (m.tipo === 'accredito' || m.tipo === 'paga') {
       acc += m.imp;
       if (activeShift && m.s === activeShift.id) {
         currAcc += m.imp;
@@ -673,6 +677,26 @@ function getBetClientStats(clientName){
   const saldoNetto = deb - inc - acc;
   const debitoResiduo = Math.max(0, saldoNetto);
   return { saldoNetto, debitoResiduo, totAccrediti: currAcc };
+}
+
+function apriModalNuovoClienteBet(){
+  form('Nuovo Cliente Scommesse', [
+    {l:'Nome e Cognome', k:'n'},
+    {l:'Telefono (opzionale)', k:'t'}
+  ], v => {
+    if(!v.n || !v.n.trim()){ alert('Nome obbligatorio'); return false; }
+    const name = v.n.trim();
+    if (S.clienti.some(x => x.tipo === 'bet' && x.nome.toLowerCase() === name.toLowerCase())) {
+      alert('Un cliente con questo nome esiste già.');
+      return false;
+    }
+    const c = { id: nid('cli'), nome: name, tel: v.t || '', sospeso: 0, storico: [], tipo: 'bet' };
+    S.clienti.push(c);
+    log('Nuovo cliente scommesse', 'cliente', name);
+    save();
+    toast('Cliente scommesse creato');
+    render();
+  });
 }
 
 function apriBet(){
@@ -757,7 +781,7 @@ function scommesse(m) {
       E('div', {class:'w', style:'background:#2b7a4b'},
         E('small', {}, 'CASSETTO'),
         E('b', {style:'font-size:24px'}, eur(t.teo)),
-        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo init: ${eur(s.fondo)} · Netto: ${eur(t.cassaIn)}`)
+        E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo init: ${eur(s.fondo)} · Incassi: +${eur(t.cassaIn)}${t.pag > 0 ? ' · Pagati: −' + eur(t.pag) : ''}`)
       ),
       E('div', {},
         E('small', {}, 'TOTALE RICARICHE'),
@@ -780,10 +804,8 @@ function scommesse(m) {
       )
     ),
     E('div', {class:'f'},
-      E('button', {class:'b', onclick: () => apriModalScommessa('debito')}, 'Nuovo Debito'),
-      E('button', {class:'b g', onclick: () => apriModalScommessa('accredito')}, 'Accredito'),
-      E('button', {class:'b g', onclick: () => apriModalScommessa('incasso')}, 'Incassa Debito'),
-      E('button', {class:'b r', onclick: chiudiBet}, 'Chiudi Cassa')
+      E('button', {class:'b', onclick: apriModalNuovoClienteBet}, '+ Aggiungi Cliente'),
+      E('button', {class:'b r', style:'margin-left:auto'}, onclick: chiudiBet}, 'Chiudi Cassa')
     ),
 
     E('h3', {style:'margin-top:20px'}, 'Clienti & Saldi Individuali')
@@ -809,9 +831,10 @@ function scommesse(m) {
             )
           ),
           E('div', {class:'f', style:'margin-top:8px'},
-            E('button', {class:'b g s', onclick: () => apriModalScommessa('debito', c.id)}, 'Debito'),
-            E('button', {class:'b g s', onclick: () => apriModalScommessa('accredito', c.id)}, 'Accredito'),
-            E('button', {class:'b g s', onclick: () => apriModalScommessa('incasso', c.id)}, 'Incassa')
+            E('button', {class:'b g s', onclick: () => apriModalScommessa('debito', c.id)}, '+ Debito'),
+            E('button', {class:'b g s', onclick: () => apriModalScommessa('accredito', c.id)}, '+ Accredito'),
+            E('button', {class:'b g s', onclick: () => apriModalScommessa('incasso', c.id)}, '− Incassa'),
+            E('button', {class:'b r s', onclick: () => apriModalScommessa('paga', c.id)}, '💸 Paga')
           )
         )
       );
@@ -831,14 +854,14 @@ function opsScommesse(){
     return container;
   }
   list.forEach(x => {
-    const isDeb = x.tipo === 'debito', isAcc = x.tipo === 'accredito';
-    const label = isDeb ? 'DEBITO' : isAcc ? 'ACCREDITO' : 'INCASSO DEBITO';
-    const badgeClass = isDeb ? 'neg' : 'pos';
+    const isDeb = x.tipo === 'debito', isAcc = x.tipo === 'accredito', isPaga = x.tipo === 'paga';
+    const label = isDeb ? 'DEBITO' : isAcc ? 'ACCREDITO' : isPaga ? 'PAGAMENTO VINCITA (− CASSA)' : 'INCASSO DEBITO (+ CASSA)';
+    const badgeClass = isDeb ? 'neg' : isPaga ? 'neg' : 'pos';
 
     container.append(E('div', {class:'cd'},
       E('div', {class:'row', style:'border:0'},
         E('b', {}, `${label} · ${x.cliente}`),
-        E('b', {class: badgeClass}, eur(x.imp))
+        E('b', {class: badgeClass}, (isPaga ? '− ' : isDeb ? '' : '+ ') + eur(x.imp))
       ),
       E('div', {class:'sm mu'}, `🗓️ ${dtFull(x.t)} · Op: ${x.opn || '–'} · Turno: ${x.sNum || '#1'}`),
       E('div', {class:'sm'}, `Causale: ${x.causale || '–'}`),
@@ -868,11 +891,14 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
     ['MANUALE', 'Altra causale manuale...']
   ];
 
-  const titolo = tipoOp === 'debito' ? 'Registra Debito Scommessa' : tipoOp === 'accredito' ? 'Registra Accredito / Vincita' : 'Incassa Debito Scommessa';
+  const titolo = tipoOp === 'debito' ? 'Registra Debito Scommessa' : 
+                 tipoOp === 'accredito' ? 'Registra Accredito / Vincita' : 
+                 tipoOp === 'paga' ? 'Paga Vincita al Cliente (Scalo Cassa)' : 'Incassa Debito Scommessa';
+
   const selectClient = E('select', {}, optsClients.map(([v,n]) => E('option',{value:v,...(preselectedClientId && String(preselectedClientId)===String(v)?{selected:''}:{})},n)));
   const inputNewClient = E('input', {placeholder:'Nome nuovo cliente (se stai creando)'});
   const inputImp = E('input', {type:'text', inputmode:'decimal', placeholder:'0,00'});
-  const selectCausale = tipoOp !== 'incasso' ? E('select', {}, causaliPreset.map(([v,n])=>E('option',{value:v},n))) : null;
+  const selectCausale = (tipoOp !== 'incasso') ? E('select', {}, causaliPreset.map(([v,n])=>E('option',{value:v},n))) : null;
   const inputCausale = E('input', {placeholder:'Causale / Note'});
   const checkDanilo = E('input', {type:'checkbox', style:'width:20px;height:20px;margin-right:8px'});
 
@@ -880,7 +906,7 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
     fl('Seleziona Cliente Scommesse', selectClient),
     fl('Nuovo Cliente (se selezionato CREA NUOVO)', inputNewClient),
     fl('Importo (€)', inputImp),
-    tipoOp !== 'incasso' ? fl('Causale Predefinita', selectCausale) : null,
+    (tipoOp !== 'incasso') ? fl('Causale Predefinita', selectCausale) : null,
     fl('Causale / Dettaglio Note', inputCausale),
     E('div', {style:'margin-top:12px;display:flex;align-items:center'},
       checkDanilo,
@@ -908,7 +934,7 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
 
       let causaleFinale = inputCausale.value.trim();
       if (tipoOp !== 'incasso') {
-        if (selectCausale.value !== 'MANUALE') {
+        if (selectCausale && selectCausale.value !== 'MANUALE') {
           causaleFinale = selectCausale.value + (causaleFinale ? ' – ' + causaleFinale : '');
         }
       } else {
@@ -1117,10 +1143,6 @@ function admin(m){
  }
 }
 
-boot();
-</script>
-</body>
-</html>
 boot();
 </script>
 </body>
