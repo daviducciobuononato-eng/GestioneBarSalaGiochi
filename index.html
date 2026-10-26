@@ -37,10 +37,10 @@ input,select,textarea{font:inherit;padding:10px;border:1px solid var(--ln);borde
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut,updatePassword} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,doc,getDoc,getDocs,setDoc,deleteDoc,onSnapshot,query,where,orderBy,limit,writeBatch} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import {getFirestore,collection,doc,getDoc,getDocs,setDoc,deleteDoc,onSnapshot,query,where,orderBy,limit,writeBatch} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import {firebaseConfig} from './firebase-config.js';
 
-const app=initializeApp(firebaseConfig),auth=getAuth(app),db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
 const $=s=>document.querySelector(s),
 E=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);else if(k==='v')e.value=a[k];else e.setAttribute(k,a[k])}c.flat().forEach(x=>x!=null&&x!==false&&e.append(x.nodeType?x:document.createTextNode(x)));return e},
 eur=c=>(c<0?'−':'')+(Math.abs(c)/100).toFixed(2).replace('.',',')+' €',
@@ -74,7 +74,11 @@ const getCOL=()=>({
 const cmp=(a,b)=>(String(a.id)>String(b.id))-(String(a.id)<String(b.id));
 
 let unsub=[],unsubSM=[],curId=null,part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}},LD=new Set(),sel=null,needSetup=false,busy=false;
-const err=e=>{msg='Errore o operazione non consentita: '+(e.code||e.message);render()};
+const err=e=>{
+  console.error("Errore Firebase:", e);
+  msg='⚠️ Errore salvataggio Cloud: '+(e.code||e.message);
+  render();
+};
 
 function saveDoc(colName, d){
   const C = getCOL();
@@ -174,7 +178,6 @@ const tnBet=id=>'#'+((S.bet_ses||[]).findIndex(x=>String(x.id)===String(id))+1);
 const vn=id=>{const a=S.sales.find(x=>String(x.id)===String(id));return'#'+S.sales.filter(x=>String(x.s)===String(a?.s)&&x.id<=id).length};
 const log=(az,ent,det)=>{
   const aObj = {id:nid('a'),u:me?.id,n:me?.nome||'sistema',az,ent,det,t:Date.now()};
-  S.audit.push(aObj);
   saveDoc('audit', aObj);
 };
 
@@ -238,7 +241,6 @@ async function newUser(nome,ruolo,p){
     const a2=getAuth(initializeApp(firebaseConfig,'s'+Date.now())),email=nome.toLowerCase().replace(/[^a-z0-9]/g,'')+Math.floor(Math.random()*9e4+1e4)+'@bar.app',c=await createUserWithEmailAndPassword(a2,email,pw(p));
     await signOut(a2);
     const uObj = {id:c.user.uid,nome,ruolo,att:1,email};
-    S.users.push(uObj);
     saveDoc('users', uObj);
     log('Nuovo utente','utente',`${nome} (${RN[ruolo]})`);
     render();
@@ -278,7 +280,6 @@ function vendita(m,s){
         if (v.c === 'NEW' || (!v.c && v.new_name)) {
           if (!v.new_name) { alert('Inserisci il nome del nuovo cliente.'); return false; }
           cli = { id: nid('cli'), nome: v.new_name, tel: v.new_tel || '', sospeso: 0, storico: [], tipo: 'bar' };
-          S.clienti.push(cli);
           log('Nuovo cliente', 'cliente', v.new_name);
         } else if (v.c) {
           cli = S.clienti.find(x => String(x.id) === String(v.c));
@@ -290,7 +291,6 @@ function vendita(m,s){
         const items = ids.map(i => { const p = S.prods.find(x => String(x.id) == String(i)); return { pid: p.id, n: p.nome, p: p.p, q: cart[i] }; });
         const n = nid('s');
         const sObj = { id: n, s: s.id, op: me.id, opn: me.nome, t: Date.now(), tot: T, items, cash: null, sospesoCliente: cli.nome };
-        S.sales.push(sObj);
         saveDoc('sales', sObj);
         
         cli.storico.push({
@@ -312,7 +312,7 @@ function vendita(m,s){
         render();
       });
     }},'A SOSPESO'),
-    E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>String(x.id)==String(i));return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);const sObj={id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null};S.sales.push(sObj);saveDoc('sales', sObj);log('Vendita','vendita '+vn(n),eur(T));cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
+    E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>String(x.id)==String(i));return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);const sObj={id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null};saveDoc('sales', sObj);log('Vendita','vendita '+vn(n),eur(T));cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
   ))}
  m.append(cd)}
 
@@ -430,7 +430,7 @@ function render(){
    E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')
  ));
 
- const m=E('main');a.append(m);if(msg){m.append(E('div',{class:'cd pos'},msg));msg=''}
+ const m=E('main');a.append(m);if(msg){m.append(E('div',{class:'cd neg',style:'font-weight:bold;margin-bottom:12px'},msg));msg=''}
  
  const views = {
    v: vendita,
@@ -481,7 +481,7 @@ function login(){
   const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return render()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';render()});return}else if(pin.length<6)pin+=k;render()}},k)));
   d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';render()}},'← Cambia utente'));return d
 }
-function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'decimal',v:'100,00'}],v=>{const f=par(v.f);if(f<0)return false;const s={id:nid('t'),da:me.id,dan:me.nome,ap:Date.now(),fondo:f,ch:null};S.ses.push(s);saveDoc('ses', s);log('Apertura turno','turno '+tn(s.id),'Fondo '+eur(f));toast('Turno aperto con fondo '+eur(f))})}
+function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'decimal',v:'100,00'}],v=>{const f=par(v.f);if(f<0)return false;const s={id:nid('t'),da:me.id,dan:me.nome,ap:Date.now(),fondo:f,ch:null};saveDoc('ses', s);log('Apertura turno','turno '+tn(s.id),'Fondo '+eur(f));toast('Turno aperto con fondo '+eur(f))})}
 
 function turno(m,s){
  if(!s){m.append(E('div',{class:'cd mu'},'Nessun turno aperto.',can('fondo')&&E('div',{},E('button',{class:'b',style:'margin-top:8px',onclick:apri},'Apri turno'))));return}
@@ -564,7 +564,7 @@ function clienti(m,s){
     form('Nuovo Cliente Bar',[{l:'Nome e Cognome',k:'n'},{l:'Telefono (opzionale)',k:'t'}],v=>{
      if(!v.n){alert('Nome obbligatorio');return false}
      const c={id:nid('cli'),nome:v.n,tel:v.t||'',sospeso:0,storico:[],tipo:'bar'};
-     S.clienti.push(c);saveDoc('clienti', c);log('Nuovo cliente','cliente',v.n);toast('Cliente creato');render();
+     saveDoc('clienti', c);log('Nuovo cliente','cliente',v.n);toast('Cliente creato');render();
     })
    }},'+ Nuovo Cliente')
   ),
@@ -681,7 +681,6 @@ function clienti(m,s){
         t: Date.now(),
         motivo: `Incasso saldo/pagamento: ${c.nome}${v.m ? ' – ' + v.m : ''}`
       };
-      S.mov.push(mObj);
       saveDoc('mov', mObj);
       saveDoc('clienti', c);
       log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);toast('Pagamento e incasso in cassa registrati');render();
@@ -690,7 +689,7 @@ function clienti(m,s){
     sosp===0?E('button',{class:'b g s neg',style:'margin-left:auto',onclick:()=>{
      if(confirm(`Eliminare il cliente ${c.nome}?`)){
       removeDoc('clienti', c.id);
-      S.clienti=S.clienti.filter(x=>String(x.id)!==String(c.id));log('Cliente eliminato','cliente',c.nome);toast('Cliente eliminato');render();
+      log('Cliente eliminato','cliente',c.nome);toast('Cliente eliminato');render();
      }
     }},'Elimina'):null
    ),
@@ -915,7 +914,6 @@ function apriModalNuovoClienteBet(){
       return false;
     }
     const c = { id: nid('cli'), nome: name, tel: v.t || '', sospeso: 0, storico: [], tipo: 'bet' };
-    S.clienti.push(c);
     saveDoc('clienti', c);
     log('Nuovo cliente scommesse', 'cliente', name);
     toast('Cliente scommesse creato');
@@ -931,7 +929,6 @@ function eliminaClienteBet(c){
   }
   if (!confirm(`Sei sicuro di voler eliminare il cliente ${c.nome}?`)) return;
   removeDoc('clienti', c.id);
-  S.clienti = S.clienti.filter(x => String(x.id) !== String(c.id));
   log('Eliminato cliente scommesse', 'cliente_bet', c.nome);
   toast('Cliente eliminato');
   render();
@@ -943,7 +940,6 @@ async function eliminaTuttiClientiBet(){
   for (const c of betClients) {
     removeDoc('clienti', c.id);
   }
-  S.clienti = S.clienti.filter(x => x.tipo !== 'bet');
   log('Eliminati tutti i clienti scommesse', 'clienti_bet', 'Tutti i clienti scommesse eliminati');
   toast('Tutti i clienti scommesse sono stati eliminati');
   render();
@@ -1001,7 +997,6 @@ function modificaMovimentoBetModal(m){
 async function eliminaMovimentoBet(m){
   if(!confirm(`Sei sicuro di voler eliminare/stornare questa operazione di ${eur(m.imp)} per ${m.cliente}?`)) return;
   removeDoc('bet_mov', m.id);
-  S.bet_mov = (S.bet_mov || []).filter(x => String(x.id) !== String(m.id));
   log('Storno/Eliminazione movimento scommesse', m.cliente || 'cassa', `${eur(m.imp)} – ${m.causale || ''}`);
   toast('Operazione stornata / eliminata');
   render();
@@ -1034,8 +1029,6 @@ function movBet(tipo){
       imp: i,
       causale: v.m.trim()
     };
-    S.bet_mov = S.bet_mov || [];
-    S.bet_mov.push(mObj);
     saveDoc('bet_mov', mObj);
     log('Movimento scommesse ' + tipo, 'cassa_bet', `${eur(i)} – ${v.m.trim()}`);
     toast(`Movimento di ${tipo} scommesse registrato`);
@@ -1048,8 +1041,6 @@ function apriBet(){
     const f = par(v.f);
     if (f < 0) return false;
     const s = { id: nid('bt'), da: me.id, dan: me.nome, ap: Date.now(), fondo: f, ch: null };
-    S.bet_ses = S.bet_ses || [];
-    S.bet_ses.push(s);
     saveDoc('bet_ses', s);
     log('Apertura turno', 'turno ' + tnBet(s.id), 'Fondo ' + eur(f));
     toast('Turno aperto con fondo ' + eur(f));
@@ -1097,9 +1088,6 @@ async function deleteBetSes(shiftId){
   const movsToDelete = (S.bet_mov || []).filter(x => String(x.s) === String(shiftId));
   movsToDelete.forEach(mo => removeDoc('bet_mov', mo.id));
 
-  S.bet_ses = (S.bet_ses || []).filter(x => String(x.id) !== String(shiftId));
-  S.bet_mov = (S.bet_mov || []).filter(x => String(x.s) !== String(shiftId));
-
   log('Eliminato turno scommesse', 'turno_bet #' + tnBet(shiftId), `Turno ID ${shiftId}`);
   toast('Turno scommesse eliminato');
   render();
@@ -1112,9 +1100,6 @@ async function deleteAllBetSes(){
 
   for(const id of sesIds) removeDoc('bet_ses', id);
   for(const id of movIds) removeDoc('bet_mov', id);
-
-  S.bet_ses = [];
-  S.bet_mov = [];
 
   log('Eliminati tutti i turni scommesse', 'turni_bet', 'Tutti i turni scommesse cancellati');
   toast('Tutti i turni scommesse sono stati eliminati');
@@ -1504,7 +1489,6 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
         if (!inputNewClient.value.trim()) { alert('Inserisci il nome del nuovo cliente.'); return false; }
         cliName = inputNewClient.value.trim();
         const newC = { id: nid('cli'), nome: cliName, tel: '', sospeso: 0, storico: [], tipo: 'bet' };
-        S.clienti.push(newC);
         saveDoc('clienti', newC);
       } else {
         const found = betClients.find(x => String(x.id) === String(selectClient.value));
@@ -1544,10 +1528,7 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
         pagatoContantiBanco: checkPagatoBanco.checked
       };
 
-      S.bet_mov = S.bet_mov || [];
-      S.bet_mov.push(mObj);
       saveDoc('bet_mov', mObj);
-
       log('Scommessa ' + tipoOp, cliName, `${eur(imp)} – ${causaleFinale}`);
       toast('Operazione scommesse registrata');
       render();
@@ -1568,9 +1549,9 @@ function storno(sale){const q={};sale.items.forEach(i=>q[i.pid]=0);const body=E(
  sale.items.forEach(i=>{const r=i.q-done(sale,i.pid),n=E('span',{},'0');body.append(E('div',{class:'row'},E('span',{},`${i.n} (${eur(i.p)}) · stornabili ${r}`),E('span',{},E('button',{class:'b g s',onclick:()=>{q[i.pid]=Math.max(0,q[i.pid]-1);n.textContent=q[i.pid];upd()}},'−'),' ',n,' ',E('button',{class:'b g s',onclick:()=>{q[i.pid]=Math.min(r,q[i.pid]+1);n.textContent=q[i.pid];upd()}},'+'))))});
  body.append(fl('Motivo (obbligatorio)',mot),note,E('div',{style:'margin-top:8px'},tt));upd();
  modal(`Storna vendita ${vn(sale.id)}`,body,[['Annulla',null,'g'],['Conferma storno',()=>{const it=sale.items.filter(i=>q[i.pid]>0).map(i=>({pid:i.pid,n:i.n,p:i.p,q:q[i.pid]})),imp=it.reduce((a,i)=>a+i.p*i.q,0),mt=mot.value==='Altro'?note.value.trim():mot.value+(note.value.trim()?' – '+note.value.trim():'');if(!imp||!mt){alert('Seleziona almeno un articolo e indica il motivo.');return false}
-  const id=nid('m');const mObj={id,s:sale.s,tipo:'storno',imp,op:me.id,opn:me.nome,t:Date.now(),motivo:mt,rif:sale.id,items:it};S.mov.push(mObj);saveDoc('mov', mObj);log('Storno','vendita '+vn(sale.id),`${eur(imp)} – ${mt}`);toast('Storno registrato: '+eur(imp))}]])}
+  const id=nid('m');const mObj={id,s:sale.s,tipo:'storno',imp,op:me.id,opn:me.nome,t:Date.now(),motivo:mt,rif:sale.id,items:it};saveDoc('mov', mObj);log('Storno','vendita '+vn(sale.id),`${eur(imp)} – ${mt}`);toast('Storno registrato: '+eur(imp))}]])}
 
-function mov(tipo){form(tipo==='entrata'?'Entrata manuale':'Uscita manuale',[{l:'Importo (€)',k:'i',m:'decimal'},{l:'Motivo (obbligatorio)',k:'m'}],v=>{const i=par(v.i);if(i<=0||!v.m){alert('Importo e motivo obbligatori');return false}const mObj={id:nid('m'),s:cur().id,tipo,imp:i,op:me.id,opn:me.nome,t:Date.now(),motivo:v.m};S.mov.push(mObj);saveDoc('mov', mObj);log('Movimento '+tipo,'cassa',`${eur(i)} – ${v.m}`);toast('Movimento registrato')})}
+function mov(tipo){form(tipo==='entrata'?'Entrata manuale':'Uscita manuale',[{l:'Importo (€)',k:'i',m:'decimal'},{l:'Motivo (obbligatorio)',k:'m'}],v=>{const i=par(v.i);if(i<=0||!v.m){alert('Importo e motivo obbligatori');return false}const mObj={id:nid('m'),s:cur().id,tipo,imp:i,op:me.id,opn:me.nome,t:Date.now(),motivo:v.m};saveDoc('mov', mObj);log('Movimento '+tipo,'cassa',`${eur(i)} – ${v.m}`);toast('Movimento registrato')})}
 
 function fondoMod(){const s=cur();form('Modifica fondo cassa',[{l:'Nuovo fondo (€)',k:'f',m:'decimal',v:(s.fondo/100).toFixed(2).replace('.',',')},{l:'Motivo',k:'m'}],v=>{const f=par(v.f);if(f<0||!v.m){alert('Motivo obbligatorio');return false}log('Cambio fondo','turno '+tn(s.id),`${eur(s.fondo)} → ${eur(f)} – ${v.m}`);s.fondo=f;saveDoc('ses', s);toast('Fondo aggiornato')})}
 
@@ -1590,13 +1571,6 @@ async function deleteSes(shiftId){
  salesToDelete.forEach(sa => removeDoc('sales', sa.id));
  movToDelete.forEach(mo => removeDoc('mov', mo.id));
 
- S.ses = S.ses.filter(x => String(x.id) !== String(shiftId));
- for(const k of ['sales','mov']){
-   part[k].cur = part[k].cur.filter(x => String(x.s) !== String(shiftId));
-   part[k].hist = part[k].hist.filter(x => String(x.s) !== String(shiftId));
- }
- merge();
-
  log('Eliminato turno', 'turno #' + tn(shiftId), `Turno ID ${shiftId}`);
  toast('Turno eliminato');
  render();
@@ -1611,12 +1585,6 @@ async function deleteAllSes(){
  for(const id of sesIds) removeDoc('ses', id);
  for(const id of salesIds) removeDoc('sales', id);
  for(const id of movIds) removeDoc('mov', id);
-
- S.ses = [];
- part.sales.cur = []; part.sales.hist = [];
- part.mov.cur = []; part.mov.hist = [];
- S.sales = []; S.mov = [];
- curId = null;
 
  log('Eliminati tutti i turni', 'turni', 'Tutti i turni cancellati');
  toast('Tutti i turni sono stati eliminati');
@@ -1676,7 +1644,7 @@ function storico(m){
  m.append(E('h3',{},'Registro attività'),...[...S.audit].reverse().slice(0,150).filter(a=>!F.o||String(a.u)===String(F.o)).map(a=>E('div',{class:'row sm'},E('span',{},E('b',{},a.az),' · '+a.ent+' · '+a.det),E('span',{class:'mu'},a.n+' · '+dt(a.t)))))}
 
 function admin(m){
- m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;const cObj={id:nid('c'),nome:v.n,att:1};S.cats.push(cObj);saveDoc('cats', cObj);log('Nuova categoria','categoria',v.n);render()})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:[...S.cats].sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;const pObj={id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1};S.prods.push(pObj);saveDoc('prods', pObj);log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`);render()})},'+ Prodotto')));
+ m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;const cObj={id:nid('c'),nome:v.n,att:1};saveDoc('cats', cObj);log('Nuova categoria','categoria',v.n);render()})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:[...S.cats].sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;const pObj={id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1};saveDoc('prods', pObj);log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`);render()})},'+ Prodotto')));
  S.cats.sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).forEach(c=>{
   const catProds=S.prods.filter(p=>String(p.c)===String(c.id)).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));
   const d=E('div',{class:'cd'},E('b',{},c.nome+(c.att?'':' (disattiva)')));
