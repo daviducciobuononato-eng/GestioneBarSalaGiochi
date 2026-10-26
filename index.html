@@ -637,30 +637,29 @@ function totBet(s){
       return;
     }
 
-    const curBal = clientBal[cli] || 0; // >0 indica DEBITO, <0 indica CREDITO
+    const curBal = clientBal[cli] || 0;
 
     if (t === 'debito') {
-      if (!danilo) clientBal[cli] = curBal + imp;
+      clientBal[cli] = curBal + imp;
     } else if (t === 'accredito') {
-      if (!danilo) clientBal[cli] = curBal - imp;
+      clientBal[cli] = curBal - imp;
     } else if (t === 'incasso_debito') {
       let cashEntered = 0;
       if (curBal > 0) {
-        // Cliente in DEBITO: l'incasso è denaro reale entrato per saldare il debito
         cashEntered = imp;
         clientBal[cli] = curBal - imp;
       } else {
-        // Cliente in CREDITO (curBal <= 0): l'incasso usa prima il credito già esistente!
         const creditAvail = Math.abs(curBal);
         const creditUsed = Math.min(creditAvail, imp);
-        cashEntered = imp - creditUsed; // Solo l'eventuale eccedenza oltre il credito è contante reale in cassa
+        cashEntered = imp - creditUsed;
         clientBal[cli] = curBal + imp;
       }
       if (isThisShift && !danilo && cashEntered > 0) {
         cassaIn += cashEntered;
       }
     } else if (t === 'paga') {
-      clientBal[cli] = curBal + imp;
+      // Vincita pagata al cliente: riduce il debito / aumenta il credito
+      clientBal[cli] = curBal - imp;
       if (isThisShift && !danilo) {
         pag += imp;
       }
@@ -748,10 +747,9 @@ function getBetClientStats(clientName){
 
   movs.forEach(m => {
     if (m.tipo === 'debito') {
-      // Tutti i debiti (anche se gestiti da Danilo) aumentano il debito totale del cliente
       deb += m.imp;
     } else if (m.tipo === 'incasso_debito') {
-      const saldoAttuale = (deb + inc_giocata_banco + pag) - (acc + inc_pagamento_debito);
+      const saldoAttuale = (deb + inc_giocata_banco) - (acc + pag + inc_pagamento_debito);
       if (saldoAttuale > 0) {
         inc_pagamento_debito += m.imp;
       } else {
@@ -764,14 +762,19 @@ function getBetClientStats(clientName){
       }
     } else if (m.tipo === 'paga') {
       pag += m.imp;
+      if (activeShift && m.s === activeShift.id) {
+        currAcc += m.imp;
+      }
     }
   });
 
-  const saldoNetto = (deb + inc_giocata_banco + pag) - (acc + inc_pagamento_debito);
+  // Saldo netto: debito - (accrediti + vincite pagate + incassi da debito)
+  const saldoNetto = (deb + inc_giocata_banco) - (acc + pag + inc_pagamento_debito);
   const debitoResiduo = Math.max(0, saldoNetto);
   
   return { saldoNetto, debitoResiduo, totAccrediti: currAcc };
 }
+  
 function apriModalNuovoClienteBet(){
   form('Nuovo Cliente Scommesse', [
     {l:'Nome e Cognome', k:'n'},
