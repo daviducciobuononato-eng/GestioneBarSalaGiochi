@@ -762,13 +762,15 @@ function getBetStatsShift(s){
   if(!s) return { 
     totDebiti: 0, debitiGiocate: 0, debitiRicariche: 0, debitiAltro: 0,
     totAccrediti: 0, accreditiVincite: 0, accreditiPrelievi: 0, 
-    totRicariche: 0, totScommesseNetto: 0, scommesseGiocate: 0, scommesseVinte: 0, totPaga: 0
+    totRicariche: 0, totScommesseNetto: 0, scommesseGiocate: 0, scommesseVinte: 0, totPaga: 0,
+    entrateManuali: 0, incassiDebiti: 0, usciteManuali: 0, vincitePagate: 0
   };
   
   const movs = (S.bet_mov || []).filter(x => x.s === s.id);
   let totDebiti = 0, debitiGiocate = 0, debitiRicariche = 0, debitiAltro = 0;
   let totAccrediti = 0, accreditiVincite = 0, accreditiPrelievi = 0;
   let totRicariche = 0, scommesseGiocate = 0, scommesseVinte = 0, totPaga = 0;
+  let entrateManuali = 0, incassiDebiti = 0, usciteManuali = 0, vincitePagate = 0;
   
   movs.forEach(m => {
     const c = (m.causale || '').toLowerCase();
@@ -787,7 +789,7 @@ function getBetStatsShift(s){
       } else {
         debitiAltro += m.imp;
       }
-    } else if (m.tipo === 'accredito' || m.tipo === 'paga') {
+    } else if (m.tipo === 'accredito') {
       totAccrediti += m.imp;
       if (isPrelievo) {
         accreditiPrelievi += m.imp;
@@ -795,9 +797,30 @@ function getBetStatsShift(s){
         accreditiVincite += m.imp;
         scommesseVinte += m.imp;
       }
-      if (m.tipo === 'paga' && !m.daniloNoCassa) {
+    } else if (m.tipo === 'paga') {
+      totAccrediti += m.imp;
+      accreditiVincite += m.imp;
+      scommesseVinte += m.imp;
+      if (!m.daniloNoCassa) {
         totPaga += m.imp;
+        vincitePagate += m.imp;
       }
+    } else if (m.tipo === 'entrata') {
+      if (!m.daniloNoCassa) {
+        entrateManuali += m.imp;
+      }
+    } else if (m.tipo === 'uscita') {
+      if (!m.daniloNoCassa) {
+        usciteManuali += m.imp;
+      }
+    } else if (m.tipo === 'incasso_debito') {
+      if (!m.daniloNoCassa) {
+        incassiDebiti += m.imp;
+      }
+    }
+
+    if (m.pagatoContantiBanco && !m.daniloNoCassa && m.tipo !== 'entrata' && m.tipo !== 'incasso_debito' && m.tipo !== 'uscita' && m.tipo !== 'paga') {
+      incassiDebiti += m.imp;
     }
   });
 
@@ -815,7 +838,11 @@ function getBetStatsShift(s){
     totScommesseNetto,
     scommesseGiocate,
     scommesseVinte,
-    totPaga
+    totPaga,
+    entrateManuali,
+    incassiDebiti,
+    usciteManuali,
+    vincitePagate
   };
 }
 
@@ -1312,12 +1339,12 @@ function betTurnoView(m){
         E('div', {style:'border-left:3px solid var(--ok);padding-left:8px'},
           E('small', {}, '📥 ENTRATE MANUALI / INCASSI (+ CASSA)'),
           E('b', {class:'pos', style:'font-size:18px;display:block;margin-top:2px'}, eur(t.cassaIn)),
-          E('small', {class:'mu', style:'font-size:11px'}, 'Incassi debiti o entrate in cassa')
+          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Entrate manuali: ${eur(shiftStats.entrateManuali)} + Incasso netto: ${eur(shiftStats.incassiDebiti)})`)
         ),
         E('div', {style:'border-left:3px solid var(--bd);padding-left:8px'},
           E('small', {}, '📤 USCITE MANUALI / PAGAMENTI (− CASSA)'),
           E('b', {class:'neg', style:'font-size:18px;display:block;margin-top:2px'}, eur(t.pag)),
-          E('small', {class:'mu', style:'font-size:11px'}, 'Vincite pagate o uscite di cassa')
+          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Uscite manuali: ${eur(shiftStats.usciteManuali)} + Vincite pagate: ${eur(shiftStats.vincitePagate)})`)
         )
       )
     ),
@@ -1355,7 +1382,7 @@ function betStoricoView(m){
           ),
           E('div', {class:'sm'}, `Fondo ${eur(shift.fondo)} · Cassetto Teorico ${eur(shift.teo)} · Contato ${eur(shift.reale)}`),
           shift.diff != null ? E('b', {class: shift.diff < 0 ? 'neg' : shift.diff > 0 ? 'pos' : '', style:'display:block;margin-top:2px'}, 'Differenza cassa: ' + eur(shift.diff)) : null,
-          E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da ${shift.dan} · chiuso da ${shift.chn || '–'} il ${dt(shift.ch)}${shift.nota ? ' · Nota: ' + shift.nota : ''}`),
+          E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da ${shift.dan} · chiuso da ${shift.chn || '–'} il ${dt(shift.ch)}${shift.nota ? ' · Nota: ' + shift.nota :''}`),
           E('div', {class:'f', style:'margin-top:8px'},
             E('button', {class:'b g s', onclick: () => mostraOperazioniTurnoBet(shift)}, '📊 Report & Operazioni'),
             E('button', {class:'b r s', onclick: () => deleteBetSes(shift.id)}, '🗑️ Elimina')
