@@ -131,7 +131,7 @@ function start(){
   const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{
     S[k]=sn.docs.map(d=>d.data()).sort(cmp);
     last[k]={};
-    S[k].forEach(d=>stamp('k',d));
+    S[k].forEach(d=>stamp(k,d));
     f&&f();
     render();
   },err));
