@@ -618,12 +618,10 @@ function totBet(s){
       acc += m.imp;
     } else if (m.tipo === 'incasso_debito' || m.tipo === 'entrata') {
       inc += m.imp;
-      // Se gestito da Danilo, NON entra nel cassetto contanti
       if (!m.daniloNoCassa) {
         cassaIn += m.imp;
       }
     } else if (m.tipo === 'paga' || m.tipo === 'uscita') {
-      // Se gestito da Danilo, NON esce dal cassetto contanti
       if (!m.daniloNoCassa) {
         pag += m.imp;
       }
@@ -701,11 +699,14 @@ function getBetClientStats(clientName){
   const activeShift = curBet();
   const movs = (S.bet_mov || []).filter(x => x.cliente && x.cliente.trim().toLowerCase() === clientName.trim().toLowerCase());
   let deb = 0, inc = 0, acc = 0, pag = 0, currAcc = 0;
+  
   movs.forEach(m => {
-    if (m.tipo === 'debito') deb += m.imp;
-    else if (m.tipo === 'incasso_debito') inc += m.imp;
-    else if (m.tipo === 'accredito') {
-      acc += m.imp;
+    if (m.tipo === 'debito') {
+      if (!m.daniloNoCassa) deb += m.imp;
+    } else if (m.tipo === 'incasso_debito') {
+      inc += m.imp;
+    } else if (m.tipo === 'accredito') {
+      if (!m.daniloNoCassa) acc += m.imp;
       if (activeShift && m.s === activeShift.id) {
         currAcc += m.imp;
       }
@@ -714,17 +715,9 @@ function getBetClientStats(clientName){
     }
   });
 
-  // 1. L'incasso riduce prima i debiti creati (deb)
-  const remainingDeb = Math.max(0, deb - inc);
-  const extraInc = Math.max(0, inc - deb);
-
-  // 2. L'incasso in eccesso scala il credito a favore del cliente (acc)
-  const netAcc = Math.max(0, acc - extraInc);
-  const overpayment = Math.max(0, extraInc - acc);
-
-  // Saldo netto: (Debiti residui + Pagamenti da cassa + overpayment) - Credito residuo
-  const saldoNetto = (remainingDeb + pag + overpayment) - netAcc;
+  const saldoNetto = (deb + pag) - (inc + acc);
   const debitoResiduo = Math.max(0, saldoNetto);
+  
   return { saldoNetto, debitoResiduo, totAccrediti: currAcc };
 }
 
@@ -899,7 +892,6 @@ function scommesse(m) {
 
   const t = totBet(s);
 
-  // Calcolo Saldi Complessivi (Debiti e Crediti All-Time) di tutti i clienti
   const betClientsAll = S.clienti.filter(x => x.tipo === 'bet');
   let totDebitiAllTime = 0;
   let totCreditiAllTime = 0;
@@ -912,7 +904,6 @@ function scommesse(m) {
   const incassoCassettoNetto = t.cassaIn - t.pag;
   const totaleCerchioTurno = shiftStats.totDebiti + incassoCassettoNetto;
 
-  // --- DASHBOARD OPERATIVA DEL TURNO ---
   m.append(
     E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
       E('div', {class:'row', style:'border:0;padding:0'},
@@ -922,7 +913,6 @@ function scommesse(m) {
       E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da: ${s.dan}`)
     ),
 
-    // SEZIONE 1: CASSA & VOLUME DEL TURNO
     E('div', {style:'margin-bottom:16px'},
       E('small', {class:'mu', style:'font-weight:bold;letter-spacing:0.5px;display:block;margin-bottom:6px'}, '1. CASSA & VOLUME DEL TURNO'),
       E('div', {class:'k'},
@@ -939,7 +929,6 @@ function scommesse(m) {
       )
     ),
 
-    // SEZIONE 2: ESPOSIZIONE & MOVIMENTI TURNO
     E('div', {style:'margin-bottom:16px'},
       E('small', {class:'mu', style:'font-weight:bold;letter-spacing:0.5px;display:block;margin-bottom:6px'}, '2. ESPOSIZIONE & MOVIMENTI TURNO'),
       E('div', {class:'k', style:'grid-template-columns:1fr 1fr'},
@@ -971,10 +960,8 @@ function scommesse(m) {
       E('button', {class:'b r', style:'margin-left:auto', onclick: chiudiBet}, 'Chiudi Cassa')
     ),
 
-    // --- TITOLO SEZIONE CLIENTI & SALDI ---
     E('h3', {style:'margin-top:20px;margin-bottom:8px'}, 'Clienti & Saldi Individuali'),
 
-    // --- MINI DASHBOARD SOTTO AL TITOLO: TOTALE DEBITI E TOTALE CREDITI ---
     E('div', {class:'k', style:'margin-bottom:14px;grid-template-columns:1fr 1fr'},
       E('div', {style:'border:1px solid var(--bd);background:rgba(179,38,30,0.06);border-radius:10px;padding:10px'},
         E('small', {style:'color:var(--bd);font-weight:bold'}, '🔴 TOTALE DEBITI CLIENTI'),
@@ -989,7 +976,6 @@ function scommesse(m) {
     )
   );
 
-  // --- BARRA DI RICERCA CLIENTI ---
   const searchInput = E('input', {
     type: 'search',
     placeholder: '🔍 Cerca cliente per nome...',
