@@ -1103,7 +1103,7 @@ function opsScommesse(shiftId = null){
     const badgeClass = (isDeb || isPaga || isUsc) ? 'neg' : 'pos';
     const sign = (isPaga || isUsc) ? '− ' : (isDeb ? '' : '+ ');
 
-    const tagDaniloText = x.tipo === 'debito' ? '👤 DEBITO SEGNATO DA DANILO (NON IN CASSA)' :
+    const tagDaniloText = x.tipo === 'debito' ? '👤 DEBITO STORNATO DA DANILO (NON IN CASSA)' :
                           x.tipo === 'accredito' ? '👤 ACCREDITATO DA DANILO (NON IN CASSA)' :
                           x.tipo === 'paga' ? '👤 PAGATO DA DANILO (NON IN CASSA)' :
                           '👤 INCASSATO DA DANILO (NON IN CASSA)';
@@ -1152,6 +1152,11 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
   const inputCausale = E('input', {placeholder:'Causale / Note'});
   const checkDanilo = E('input', {type:'checkbox', style:'width:20px;height:20px;margin-right:8px'});
 
+  const textDanilo = tipoOp === 'debito' ? 'Debito stornato da Danilo (non incide nel cassetto contanti)' :
+                     tipoOp === 'accredito' ? 'Accreditato da Danilo (non incide nel cassetto contanti)' :
+                     tipoOp === 'paga' ? 'Pagato da Danilo (non incide nel cassetto contanti)' :
+                     'Incassato da Danilo (non incide nel cassetto contanti)';
+
   const bodyModal = E('div', {},
     fl('Seleziona Cliente Scommesse', selectClient),
     fl('Nuovo Cliente (se selezionato CREA NUOVO)', inputNewClient),
@@ -1160,7 +1165,7 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
     fl('Causale / Dettaglio Note', inputCausale),
     E('div', {style:'margin-top:12px;display:flex;align-items:center'},
       checkDanilo,
-      E('label', {style:'font-weight:bold;font-size:14px;color:var(--fg)'}, 'CREDITO/INCASSO DA DANILO (non cambia cassa scommesse)')
+      E('label', {style:'font-weight:bold;font-size:14px;color:var(--fg)'}, textDanilo)
     )
   );
 
