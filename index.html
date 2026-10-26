@@ -608,23 +608,66 @@ function clienti(m,s){
 
 function totBet(s){
   if (!s) return { deb:0, acc:0, inc:0, pag:0, cassaIn:0, teo:0 };
-  const movs = (S.bet_mov || []).filter(x => x.s === s.id);
+  
+  const allMovs = [...(S.bet_mov || [])].sort((a,b) => a.t - b.t);
+  const clientBal = {};
   let deb = 0, acc = 0, inc = 0, cassaIn = 0, pag = 0;
   
-  movs.forEach(m => {
-    if (m.tipo === 'debito') {
-      deb += m.imp;
-    } else if (m.tipo === 'accredito') {
-      acc += m.imp;
-    } else if (m.tipo === 'incasso_debito' || m.tipo === 'entrata') {
-      inc += m.imp;
-      if (!m.daniloNoCassa) {
-        cassaIn += m.imp;
+  allMovs.forEach(m => {
+    const cli = (m.cliente || '').trim().toLowerCase();
+    const t = m.tipo;
+    const imp = m.imp;
+    const danilo = m.daniloNoCassa;
+    const isThisShift = (m.s === s.id);
+    
+    if (isThisShift) {
+      if (t === 'debito') deb += imp;
+      else if (t === 'accredito') acc += imp;
+      else if (t === 'incasso_debito') inc += imp;
+    }
+
+    if (!cli || cli === 'cassa') {
+      if (isThisShift) {
+        if (t === 'entrata' || t === 'incasso_debito') {
+          if (!danilo) cassaIn += imp;
+        } else if (t === 'uscita' || t === 'paga') {
+          if (!danilo) pag += imp;
+        }
       }
-    } else if (m.tipo === 'paga' || m.tipo === 'uscita') {
-      if (!m.daniloNoCassa) {
-        pag += m.imp;
+      return;
+    }
+
+    const curBal = clientBal[cli] || 0; // >0 indica DEBITO, <0 indica CREDITO
+
+    if (t === 'debito') {
+      if (!danilo) clientBal[cli] = curBal + imp;
+    } else if (t === 'accredito') {
+      if (!danilo) clientBal[cli] = curBal - imp;
+    } else if (t === 'incasso_debito') {
+      let cashEntered = 0;
+      if (curBal > 0) {
+        // Cliente in DEBITO: l'incasso è denaro reale entrato per saldare il debito
+        cashEntered = imp;
+        clientBal[cli] = curBal - imp;
+      } else {
+        // Cliente in CREDITO (curBal <= 0): l'incasso usa prima il credito già esistente!
+        const creditAvail = Math.abs(curBal);
+        const creditUsed = Math.min(creditAvail, imp);
+        cashEntered = imp - creditUsed; // Solo l'eventuale eccedenza oltre il credito è contante reale in cassa
+        clientBal[cli] = curBal + imp;
       }
+      if (isThisShift && !danilo && cashEntered > 0) {
+        cassaIn += cashEntered;
+      }
+    } else if (t === 'paga') {
+      clientBal[cli] = curBal + imp;
+      if (isThisShift && !danilo) {
+        pag += imp;
+      }
+    } else if (t === 'entrata' && isThisShift && !danilo) {
+      cassaIn += imp;
+    } else if (t === 'uscita' && isThisShift && !danilo) {
+      pag += imp;
     }
   });
 
