@@ -52,7 +52,7 @@ PM={fondo:['prop','resp'],chiudi:['prop','resp'],catalogo:['prop','resp'],storic
 X0=0;
 let S={users:[],cats:[],prods:[],ses:[],sales:[],mov:[],audit:[],clienti:[],bet_mov:[],bet_ses:[]},me=null,tab='v',cat=null,cart={},pin='',idle,msg='',F={s:'',o:'',t:'',p:'',d:'',hideBetClients:false};
 let isTestMode=false;
-let activeModule=null; // 'bar' | 'bet' | null
+let activeModule=null;
 
 const can=a=>me&&PM[a].includes(me.ruolo);
 const isDavide=()=>me&&(me.nome.trim().toLowerCase()==='davide'||me.ruolo==='prop');
@@ -760,19 +760,20 @@ function totBet(s){
 
 function getBetStatsShift(s){
   if(!s) return { 
-    totDebiti: 0, debitiGiocate: 0, debitiRicariche: 0, 
+    totDebiti: 0, debitiGiocate: 0, debitiRicariche: 0, debitiAltro: 0,
     totAccrediti: 0, accreditiVincite: 0, accreditiPrelievi: 0, 
     totRicariche: 0, totScommesseNetto: 0, scommesseGiocate: 0, scommesseVinte: 0, totPaga: 0
   };
   
   const movs = (S.bet_mov || []).filter(x => x.s === s.id);
-  let totDebiti = 0, debitiGiocate = 0, debitiRicariche = 0;
+  let totDebiti = 0, debitiGiocate = 0, debitiRicariche = 0, debitiAltro = 0;
   let totAccrediti = 0, accreditiVincite = 0, accreditiPrelievi = 0;
   let totRicariche = 0, scommesseGiocate = 0, scommesseVinte = 0, totPaga = 0;
   
   movs.forEach(m => {
     const c = (m.causale || '').toLowerCase();
     const isRicarica = c.includes('ricarica');
+    const isBiglietto = c.includes('biglietto') || c.includes('giocata') || c.includes('scommessa');
     const isPrelievo = c.includes('prelievo') || c.includes('conto');
 
     if (m.tipo === 'debito') {
@@ -780,9 +781,11 @@ function getBetStatsShift(s){
       if (isRicarica) {
         debitiRicariche += m.imp;
         totRicariche += m.imp;
-      } else {
+      } else if (isBiglietto) {
         debitiGiocate += m.imp;
         scommesseGiocate += m.imp;
+      } else {
+        debitiAltro += m.imp;
       }
     } else if (m.tipo === 'accredito' || m.tipo === 'paga') {
       totAccrediti += m.imp;
@@ -803,7 +806,8 @@ function getBetStatsShift(s){
   return { 
     totDebiti, 
     debitiGiocate, 
-    debitiRicariche, 
+    debitiRicariche,
+    debitiAltro,
     totAccrediti, 
     accreditiVincite, 
     accreditiPrelievi, 
@@ -1298,7 +1302,7 @@ function betTurnoView(m){
         E('div', {},
           E('small', {}, '⚠️ DEBITI CREATI IN QUESTO TURNO'),
           E('b', {class:'neg', style:'font-size:20px;display:block;margin-top:2px'}, eur(shiftStats.totDebiti)),
-          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Giocate: ${eur(shiftStats.debitiGiocate)} + Ricariche: ${eur(shiftStats.debitiRicariche)})`)
+          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Giocate: ${eur(shiftStats.debitiGiocate)} + Ricariche: ${eur(shiftStats.debitiRicariche)} + Altro: ${eur(shiftStats.debitiAltro)})`)
         ),
         E('div', {},
           E('small', {}, '🎁 ACCREDITI / VINCITE TURNO'),
