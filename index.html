@@ -748,20 +748,17 @@ function getBetClientStats(clientName){
 
   movs.forEach(m => {
     if (m.tipo === 'debito') {
-      if (!m.daniloNoCassa) deb += m.imp;
+      // Tutti i debiti (anche se gestiti da Danilo) aumentano il debito totale del cliente
+      deb += m.imp;
     } else if (m.tipo === 'incasso_debito') {
-      // Calcola il saldo corrente prima di questo incasso
       const saldoAttuale = (deb + inc_giocata_banco + pag) - (acc + inc_pagamento_debito);
-      
       if (saldoAttuale > 0) {
-        // Se il cliente ha un debito aperto, l'incasso va a ridurre il debito
         inc_pagamento_debito += m.imp;
       } else {
-        // Se il cliente ha credito, l'incasso viene trattato come giocata al banco e scala il credito!
         inc_giocata_banco += m.imp;
       }
     } else if (m.tipo === 'accredito') {
-      if (!m.daniloNoCassa) acc += m.imp;
+      acc += m.imp;
       if (activeShift && m.s === activeShift.id) {
         currAcc += m.imp;
       }
@@ -775,7 +772,6 @@ function getBetClientStats(clientName){
   
   return { saldoNetto, debitoResiduo, totAccrediti: currAcc };
 }
-
 function apriModalNuovoClienteBet(){
   form('Nuovo Cliente Scommesse', [
     {l:'Nome e Cognome', k:'n'},
@@ -1107,6 +1103,11 @@ function opsScommesse(shiftId = null){
     const badgeClass = (isDeb || isPaga || isUsc) ? 'neg' : 'pos';
     const sign = (isPaga || isUsc) ? '− ' : (isDeb ? '' : '+ ');
 
+    const tagDaniloText = x.tipo === 'debito' ? '👤 DEBITO SEGNATO DA DANILO (NON IN CASSA)' :
+                          x.tipo === 'accredito' ? '👤 ACCREDITATO DA DANILO (NON IN CASSA)' :
+                          x.tipo === 'paga' ? '👤 PAGATO DA DANILO (NON IN CASSA)' :
+                          '👤 INCASSATO DA DANILO (NON IN CASSA)';
+
     container.append(E('div', {class:'cd'},
       E('div', {class:'row', style:'border:0'},
         E('b', {}, `${label}${x.cliente ? ' · ' + x.cliente : ''}`),
@@ -1114,7 +1115,7 @@ function opsScommesse(shiftId = null){
       ),
       E('div', {class:'sm mu'}, `🗓️ ${dtFull(x.t)} · Op: ${x.opn || '–'} · Turno: ${x.sNum || '#1'}`),
       E('div', {class:'sm'}, `Causale: ${x.causale || '–'}`),
-      x.daniloNoCassa ? E('div', {class:'tag-danilo', style:'margin-top:4px'}, '👤 INCASSATO DA DANILO (NON IN CASSA)') : null
+      x.daniloNoCassa ? E('div', {class:'tag-danilo', style:'margin-top:4px'}, tagDaniloText) : null
     ));
   });
   return container;
