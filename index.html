@@ -71,34 +71,25 @@ const getCOL=()=>({
   bet_mov: isTestMode ? 'test_bet_mov' : 'bet_mov',
   bet_ses: isTestMode ? 'test_bet_ses' : 'bet_ses'
 });
-const cmp=(a,b)=>(a.id>b.id)-(a.id<b.id);
+const cmp=(a,b)=>(String(a.id)>String(b.id))-(String(a.id)<String(b.id));
 
-let last={},unsub=[],unsubSM=[],curId=null,part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}},LD=new Set(),sel=null,needSetup=false,busy=false;
+let unsub=[],unsubSM=[],curId=null,part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}},LD=new Set(),sel=null,needSetup=false,busy=false;
 const err=e=>{msg='Errore o operazione non consentita: '+(e.code||e.message);render()};
-const stamp=(k,d)=>(last[k]||(last[k]={}))[String(d.id)]=JSON.stringify(d);
 
-function save(){
+function saveDoc(colName, d){
   const C = getCOL();
-  for(const k in C){
-    const L=last[k]||(last[k]={}),seen=new Set();
-    for(const d of S[k]||[]){
-      const id=String(d.id),j=JSON.stringify(d);
-      seen.add(id);
-      if(L[id]!==j){
-        L[id]=j;
-        setDoc(doc(db,C[k],id),JSON.parse(j)).catch(err);
-      }
-    }
-    for(const id in L){
-      if(!seen.has(id)){
-        delete L[id];
-        deleteDoc(doc(db,C[k],id)).catch(err);
-      }
-    }
-  }
+  const cName = C[colName] || colName;
+  const idStr = String(d.id);
+  return setDoc(doc(db, cName, idStr), JSON.parse(JSON.stringify(d))).catch(err);
 }
 
-function merge(){for(const k of['sales','mov']){S[k]=[...part[k].hist,...part[k].cur].sort(cmp);last[k]={};S[k].forEach(d=>stamp(k,d))}}
+function removeDoc(colName, id){
+  const C = getCOL();
+  const cName = C[colName] || colName;
+  return deleteDoc(doc(db, cName, String(id))).catch(err);
+}
+
+function merge(){for(const k of['sales','mov']){S[k]=[...part[k].hist,...part[k].cur].sort(cmp)}}
 
 function subSM(id){
   unsubSM.forEach(f=>f());
@@ -130,8 +121,6 @@ function start(){
   const C = getCOL();
   const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{
     S[k]=sn.docs.map(d=>d.data()).sort(cmp);
-    last[k]={};
-    S[k].forEach(d=>stamp(k,d));
     f&&f();
     render();
   },err));
@@ -165,7 +154,6 @@ function stop(){
   unsub=[];
   unsubSM=[];
   for(const k of['cats','prods','ses','sales','mov','audit','clienti','bet_mov','bet_ses'])S[k]=[];
-  last={users:last.users};
   part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}};
   LD=new Set();
   curId=null;
@@ -181,10 +169,14 @@ function toggleTestMode(){
 }
 
 let LI=0;const nid=()=>LI=Math.max(LI+1,Date.now()*100+Math.floor(Math.random()*100));
-const tn=id=>'#'+(S.ses.findIndex(x=>x.id===id)+1);
-const tnBet=id=>'#'+((S.bet_ses||[]).findIndex(x=>x.id===id)+1);
-const vn=id=>{const a=S.sales.find(x=>x.id===id);return'#'+S.sales.filter(x=>x.s===a?.s&&x.id<=id).length};
-const log=(az,ent,det)=>S.audit.push({id:nid('a'),u:me?.id,n:me?.nome||'sistema',az,ent,det,t:Date.now()});
+const tn=id=>'#'+(S.ses.findIndex(x=>String(x.id)===String(id))+1);
+const tnBet=id=>'#'+((S.bet_ses||[]).findIndex(x=>String(x.id)===String(id))+1);
+const vn=id=>{const a=S.sales.find(x=>String(x.id)===String(id));return'#'+S.sales.filter(x=>String(x.s)===String(a?.s)&&x.id<=id).length};
+const log=(az,ent,det)=>{
+  const aObj = {id:nid('a'),u:me?.id,n:me?.nome||'sistema',az,ent,det,t:Date.now()};
+  S.audit.push(aObj);
+  saveDoc('audit', aObj);
+};
 
 const LIST=`Bevande|Campari Soda:150,Cedrata San Pellegrino:150,Cocktail San Pellegrino:150,Kinley Lemon Taste:150,Yoga succo ACE:150,Yoga succo pera:150,Yoga succo albicocca:150,Yoga succo ananas:150,Estathé limone:200,Estathé pesca:200,Coca-Cola normale:150,Coca-Cola Zero:150,Coca-Cola Zero Zero:150,Red Bull:200,Peroni:150,Corona:250,Heineken:200,Bjorne Beer (la birra dell’orso):300,Tennent’s:300,Peroni Chill Lemon:150,Tuborg:150
 Snack|Lupini:100,Ceci tostati:100,Misto salato:100,Olive piccanti:100,Olive:100,Arachidi salate:100,Fave tostate:100,Lupini piccanti:100
@@ -208,8 +200,8 @@ function lock(){
 async function authFlow(u){
   if(busy)return;
   if(!u){stop();me=null;activeModule=null;return render()}
-  for(let i=0;i<50&&!S.users.some(x=>x.id===u.uid);i++)await new Promise(r=>setTimeout(r,100));
-  me=S.users.find(x=>x.id===u.uid);if(!me||!me.att){await signOut(auth);msg='Utente non abilitato';return}
+  for(let i=0;i<50&&!S.users.some(x=>String(x.id)===String(u.uid));i++)await new Promise(r=>setTimeout(r,100));
+  me=S.users.find(x=>String(x.id)===String(u.uid));if(!me||!me.att){await signOut(auth);msg='Utente non abilitato';return}
   
   if(!isBetUser()){
     activeModule='bar';
@@ -219,13 +211,12 @@ async function authFlow(u){
   }
   start();
   log('Accesso','utente',me.nome);
-  save();
   render();
 }
 
 async function boot(){
   render();
-  onSnapshot(collection(db,'profili'),sn=>{S.users=sn.docs.map(d=>d.data()).sort(cmp);last.users={};S.users.forEach(d=>stamp('users',d));render()},err);
+  onSnapshot(collection(db,'profili'),sn=>{S.users=sn.docs.map(d=>d.data()).sort(cmp);render()},err);
   try{needSetup=!(await getDoc(doc(db,'config','init'))).exists()}catch(e){}
   onAuthStateChanged(auth,authFlow);
   render();
@@ -245,14 +236,19 @@ async function newUser(nome,ruolo,p){
   if(!nome||!/^\d{4,6}$/.test(p)){alert('Nome e PIN 4–6 cifre');return false}
   try{
     const a2=getAuth(initializeApp(firebaseConfig,'s'+Date.now())),email=nome.toLowerCase().replace(/[^a-z0-9]/g,'')+Math.floor(Math.random()*9e4+1e4)+'@bar.app',c=await createUserWithEmailAndPassword(a2,email,pw(p));
-    await signOut(a2);S.users.push({id:c.user.uid,nome,ruolo,att:1,email});log('Nuovo utente','utente',`${nome} (${RN[ruolo]})`);save();render();
+    await signOut(a2);
+    const uObj = {id:c.user.uid,nome,ruolo,att:1,email};
+    S.users.push(uObj);
+    saveDoc('users', uObj);
+    log('Nuovo utente','utente',`${nome} (${RN[ruolo]})`);
+    render();
   }catch(e){alert('Errore: '+(e.code||e.message));return false}
 }
 
 function cambioPin(){
   form('Cambia il tuo PIN',[{l:'Nuovo PIN (4–6 cifre)',k:'p',m:'numeric'}],async v=>{
     if(!/^\d{4,6}$/.test(v.p)){alert('PIN di 4–6 cifre');return false}
-    try{await updatePassword(auth.currentUser,pw(v.p));log('Cambio PIN','utente',me.nome);save();toast('PIN aggiornato')}catch(e){alert('Esci e rientra, poi riprova ('+(e.code||e.message)+')');return false}
+    try{await updatePassword(auth.currentUser,pw(v.p));log('Cambio PIN','utente',me.nome);toast('PIN aggiornato')}catch(e){alert('Esci e rientra, poi riprova ('+(e.code||e.message)+')');return false}
   })
 }
 
@@ -261,11 +257,11 @@ const curBet=()=>(S.bet_ses||[]).find(s=>!s.ch);
 
 function vendita(m,s){
  if(!s){m.append(E('div',{class:'cd'},E('b',{},'Nessun turno aperto'),E('p',{class:'mu'},'Solo Proprietario o Responsabile possono aprire il turno.'),can('fondo')&&E('button',{class:'b',onclick:apri},'Apri turno e imposta fondo cassa')));return}
- const cs=S.cats.filter(c=>c.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));cat=cs.find(c=>c.id===cat)?cat:cs[0]?.id;
- m.append(E('div',{class:'cats'},cs.map(c=>E('button',{class:c.id===cat?'on':'',onclick:()=>{cat=c.id;render()}},c.nome))),E('div',{class:'gr'},S.prods.filter(p=>p.c===cat&&p.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(p=>E('button',{onclick:()=>{cart[p.id]=(cart[p.id]||0)+1;render()}},p.nome,E('small',{},eur(p.p))))));
- const ids=Object.keys(cart),T=ids.reduce((a,i)=>a+cart[i]*S.prods.find(p=>p.id==i).p,0);
+ const cs=S.cats.filter(c=>c.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));cat=cs.find(c=>String(c.id)===String(cat))?cat:cs[0]?.id;
+ m.append(E('div',{class:'cats'},cs.map(c=>E('button',{class:String(c.id)===String(cat)?'on':'',onclick:()=>{cat=c.id;render()}},c.nome))),E('div',{class:'gr'},S.prods.filter(p=>String(p.c)===String(cat)&&p.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(p=>E('button',{onclick:()=>{cart[p.id]=(cart[p.id]||0)+1;render()}},p.nome,E('small',{},eur(p.p))))));
+ const ids=Object.keys(cart),T=ids.reduce((a,i)=>a+cart[i]*S.prods.find(p=>String(p.id)==String(i)).p,0);
  const cd=E('div',{class:'cd',style:'margin-top:14px'},E('b',{},'Conto'),ids.length?'':E('div',{class:'mu'},'Tocca i prodotti per aggiungerli'));
- ids.forEach(i=>{const p=S.prods.find(x=>x.id==i);cd.append(E('div',{class:'row'},E('span',{},p.nome),E('span',{},E('button',{class:'b g s',onclick:()=>{cart[i]--;if(!cart[i])delete cart[i];render()}},'−'),' '+cart[i]+' ',E('button',{class:'b g s',onclick:()=>{cart[i]++;render()}},'+'),' '+eur(cart[i]*p.p))))});
+ ids.forEach(i=>{const p=S.prods.find(x=>String(x.id)==String(i));cd.append(E('div',{class:'row'},E('span',{},p.nome),E('span',{},E('button',{class:'b g s',onclick:()=>{cart[i]--;if(!cart[i])delete cart[i];render()}},'−'),' '+cart[i]+' ',E('button',{class:'b g s',onclick:()=>{cart[i]++;render()}},'+'),' '+eur(cart[i]*p.p))))});
  if(ids.length){const r=E('input',{inputmode:'decimal',placeholder:'Contanti ricevuti (facoltativo)'}),rs=E('div',{class:'mu'},'Resto: –');r.oninput=()=>{const c=par(r.value);rs.textContent=r.value?(c>=T?'Resto: '+eur(c-T):'Mancano '+eur(T-c)):'Resto: –'};
   cd.append(E('div',{class:'row'},E('b',{},'TOTALE'),E('b',{},eur(T))),r,rs,E('div',{class:'ac'},
     E('button',{class:'b g',onclick:()=>{cart={};render()}},'Svuota'),
@@ -291,9 +287,11 @@ function vendita(m,s){
 
         cli.sospeso = (cli.sospeso || 0) + T;
         cli.storico = cli.storico || [];
-        const items = ids.map(i => { const p = S.prods.find(x => x.id == i); return { pid: p.id, n: p.nome, p: p.p, q: cart[i] }; });
+        const items = ids.map(i => { const p = S.prods.find(x => String(x.id) == String(i)); return { pid: p.id, n: p.nome, p: p.p, q: cart[i] }; });
         const n = nid('s');
-        S.sales.push({ id: n, s: s.id, op: me.id, opn: me.nome, t: Date.now(), tot: T, items, cash: null, sospesoCliente: cli.nome });
+        const sObj = { id: n, s: s.id, op: me.id, opn: me.nome, t: Date.now(), tot: T, items, cash: null, sospesoCliente: cli.nome };
+        S.sales.push(sObj);
+        saveDoc('sales', sObj);
         
         cli.storico.push({
           id: nid('st'),
@@ -307,19 +305,19 @@ function vendita(m,s){
           items: items
         });
 
+        saveDoc('clienti', cli);
         log('Vendita Sospesa', cli.nome, `${eur(T)} - ${v.m || 'Sospeso'}`);
-        save();
         cart = {};
         toast(`Segnati ${eur(T)} in sospeso a ${cli.nome}`);
         render();
       });
     }},'A SOSPESO'),
-    E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>x.id==i);return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);S.sales.push({id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null});log('Vendita','vendita '+vn(n),eur(T));save();cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
+    E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>String(x.id)==String(i));return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);const sObj={id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null};S.sales.push(sObj);saveDoc('sales', sObj);log('Vendita','vendita '+vn(n),eur(T));cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
   ))}
  m.append(cd)}
 
 function tot(s){
- const v=S.sales.filter(x=>x.s===s.id),m=S.mov.filter(x=>x.s===s.id),
+ const v=S.sales.filter(x=>String(x.s)===String(s.id)),m=S.mov.filter(x=>String(x.s)===String(s.id)),
  rawSalesTotal=v.reduce((a,x)=>a+x.tot,0),
  cashSales=v.filter(x=>!x.sospesoCliente).reduce((a,x)=>a+x.tot,0),
  sospSales=v.filter(x=>x.sospesoCliente).reduce((a,x)=>a+x.tot,0),
@@ -332,7 +330,7 @@ function tot(s){
  let debMan = 0;
  (S.clienti||[]).forEach(c => {
    (c.storico||[]).forEach(stItem => {
-     if (stItem.tipo === 'debito_manuale' && (stItem.sNum === tn(s.id) || stItem.sId === s.id)) {
+     if (stItem.tipo === 'debito_manuale' && (String(stItem.sNum) === String(tn(s.id)) || String(stItem.sId) === String(s.id))) {
        debMan += stItem.imp;
      }
    });
@@ -357,7 +355,7 @@ function tot(s){
  };
 }
 
-const done=(sale,pid)=>S.mov.filter(m=>m.rif===sale.id&&m.tipo==='storno').reduce((a,m)=>a+(m.items.find(i=>i.pid===pid)?.q||0),0);
+const done=(sale,pid)=>S.mov.filter(m=>String(m.rif)===String(sale.id)&&m.tipo==='storno').reduce((a,m)=>a+(m.items.find(i=>String(i.pid)===String(pid))?.q||0),0);
 function modal(t,body,acts){const o=E('div',{class:'ov',onclick:e=>e.target===o&&o.remove()},E('div',{class:'md'},E('h3',{},t),body,E('div',{class:'ac'},acts.map(([l,f,c])=>E('button',{class:'b '+(c||''),onclick:async()=>{if(!f||await f()!==false)o.remove()}},l)))));document.body.append(o);return o}
 const fl=(l,i)=>E('div',{},E('label',{},l),i);
 function form(t,fs,ok,lab='Conferma'){const els={};const b=E('div',{},fs.map(f=>{
@@ -483,7 +481,7 @@ function login(){
   const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return render()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';render()});return}else if(pin.length<6)pin+=k;render()}},k)));
   d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';render()}},'← Cambia utente'));return d
 }
-function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'decimal',v:'100,00'}],v=>{const f=par(v.f);if(f<0)return false;const s={id:nid('t'),da:me.id,dan:me.nome,ap:Date.now(),fondo:f,ch:null};S.ses.push(s);log('Apertura turno','turno '+tn(s.id),'Fondo '+eur(f));save();toast('Turno aperto con fondo '+eur(f))})}
+function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'decimal',v:'100,00'}],v=>{const f=par(v.f);if(f<0)return false;const s={id:nid('t'),da:me.id,dan:me.nome,ap:Date.now(),fondo:f,ch:null};S.ses.push(s);saveDoc('ses', s);log('Apertura turno','turno '+tn(s.id),'Fondo '+eur(f));toast('Turno aperto con fondo '+eur(f))})}
 
 function turno(m,s){
  if(!s){m.append(E('div',{class:'cd mu'},'Nessun turno aperto.',can('fondo')&&E('div',{},E('button',{class:'b',style:'margin-top:8px',onclick:apri},'Apri turno'))));return}
@@ -523,25 +521,27 @@ async function modificaMovimentoCliente(c, st) {
   }
 
   if (st.tipo === 'incasso_saldo') {
-   const linkedMov = S.mov.find(m => (st.movId && m.id === st.movId) || (m.isIncassoDebito && Math.abs(m.t - st.t) < 5000));
+   const linkedMov = S.mov.find(m => (st.movId && String(m.id) === String(st.movId)) || (m.isIncassoDebito && Math.abs(m.t - st.t) < 5000));
    if (linkedMov) {
     linkedMov.imp = newImp;
     linkedMov.motivo = `Incasso saldo/pagamento: ${c.nome}${v.m ? ' – ' + v.m.trim() : ''}`;
+    saveDoc('mov', linkedMov);
    }
   }
 
   if (st.tipo === 'sospeso_cassa') {
-   const linkedSale = S.sales.find(sa => sa.id === st.id || Math.abs(sa.t - st.t) < 5000);
+   const linkedSale = S.sales.find(sa => String(sa.id) === String(st.id) || Math.abs(sa.t - st.t) < 5000);
    if (linkedSale) {
     linkedSale.tot = newImp;
+    saveDoc('sales', linkedSale);
    }
   }
 
   st.imp = newImp;
   st.nota = v.m ? v.m.trim() : '';
 
+  saveDoc('clienti', c);
   log('Modifica movimento cliente', c.nome, `${st.tipo}: da ${eur(oldImp)} a ${eur(newImp)}`);
-  save();
   toast('Movimento aggiornato nel cliente e nel turno');
   render();
  });
@@ -564,7 +564,7 @@ function clienti(m,s){
     form('Nuovo Cliente Bar',[{l:'Nome e Cognome',k:'n'},{l:'Telefono (opzionale)',k:'t'}],v=>{
      if(!v.n){alert('Nome obbligatorio');return false}
      const c={id:nid('cli'),nome:v.n,tel:v.t||'',sospeso:0,storico:[],tipo:'bar'};
-     S.clienti.push(c);log('Nuovo cliente','cliente',v.n);save();toast('Cliente creato');render();
+     S.clienti.push(c);saveDoc('clienti', c);log('Nuovo cliente','cliente',v.n);toast('Cliente creato');render();
     })
    }},'+ Nuovo Cliente')
   ),
@@ -640,7 +640,8 @@ function clienti(m,s){
         imp: imp,
         nota: v.m.trim()
       });
-      log('Aggiunto debito',c.nome,`${eur(imp)} - ${v.m.trim()}`);save();toast('Debito registrato');render();
+      saveDoc('clienti', c);
+      log('Aggiunto debito',c.nome,`${eur(imp)} - ${v.m.trim()}`);toast('Debito registrato');render();
      })
     }},'+ Debito'),
     E('button',{class:'b g s',onclick:()=>{
@@ -669,7 +670,7 @@ function clienti(m,s){
         imp: imp,
         nota: v.m ? v.m.trim() : 'Pagamento / Saldo'
       });
-      S.mov.push({
+      const mObj = {
         id: mId,
         s: activeShift.id,
         tipo: 'entrata',
@@ -679,13 +680,17 @@ function clienti(m,s){
         opn: me.nome,
         t: Date.now(),
         motivo: `Incasso saldo/pagamento: ${c.nome}${v.m ? ' – ' + v.m : ''}`
-      });
-      log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);save();toast('Pagamento e incasso in cassa registrati');render();
+      };
+      S.mov.push(mObj);
+      saveDoc('mov', mObj);
+      saveDoc('clienti', c);
+      log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);toast('Pagamento e incasso in cassa registrati');render();
      })
     }},'− Salda'),
     sosp===0?E('button',{class:'b g s neg',style:'margin-left:auto',onclick:()=>{
      if(confirm(`Eliminare il cliente ${c.nome}?`)){
-      S.clienti=S.clienti.filter(x=>x!==c);log('Cliente eliminato','cliente',c.nome);save();toast('Cliente eliminato');render();
+      removeDoc('clienti', c.id);
+      S.clienti=S.clienti.filter(x=>String(x.id)!==String(c.id));log('Cliente eliminato','cliente',c.nome);toast('Cliente eliminato');render();
      }
     }},'Elimina'):null
    ),
@@ -706,7 +711,7 @@ function totBet(s){
     const t = m.tipo;
     const imp = m.imp;
     const danilo = m.daniloNoCassa;
-    const isThisShift = (m.s === s.id);
+    const isThisShift = (String(m.s) === String(s.id));
     const pagatoBanco = m.pagatoContantiBanco;
     
     if (isThisShift) {
@@ -783,7 +788,7 @@ function getBetStatsShift(s){
     entrateManuali: 0, incassiDebiti: 0, usciteManuali: 0, vincitePagate: 0
   };
   
-  const movs = (S.bet_mov || []).filter(x => x.s === s.id);
+  const movs = (S.bet_mov || []).filter(x => String(x.s) === String(s.id));
   let totDebiti = 0, debitiGiocate = 0, debitiRicariche = 0, debitiAltro = 0;
   let totAccrediti = 0, accreditiVincite = 0, accreditiPrelievi = 0;
   let totRicariche = 0, scommesseGiocate = 0, scommesseVinte = 0, totPaga = 0;
@@ -881,12 +886,12 @@ function getBetClientStats(clientName){
       inc += imp;
     } else if (m.tipo === 'accredito') {
       acc += imp;
-      if (activeShift && m.s === activeShift.id) {
+      if (activeShift && String(m.s) === String(activeShift.id)) {
         currAcc += imp;
       }
     } else if (m.tipo === 'paga') {
       pag += imp;
-      if (activeShift && m.s === activeShift.id) {
+      if (activeShift && String(m.s) === String(activeShift.id)) {
         currAcc += imp;
       }
     }
@@ -911,8 +916,8 @@ function apriModalNuovoClienteBet(){
     }
     const c = { id: nid('cli'), nome: name, tel: v.t || '', sospeso: 0, storico: [], tipo: 'bet' };
     S.clienti.push(c);
+    saveDoc('clienti', c);
     log('Nuovo cliente scommesse', 'cliente', name);
-    save();
     toast('Cliente scommesse creato');
     render();
   });
@@ -925,31 +930,23 @@ function eliminaClienteBet(c){
     return;
   }
   if (!confirm(`Sei sicuro di voler eliminare il cliente ${c.nome}?`)) return;
-  try {
-    const C = getCOL();
-    deleteDoc(doc(db, C.clienti, String(c.id))).catch(err);
-    S.clienti = S.clienti.filter(x => x.id !== c.id);
-    log('Eliminato cliente scommesse', 'cliente_bet', c.nome);
-    save();
-    toast('Cliente eliminato');
-    render();
-  } catch(e) { err(e); }
+  removeDoc('clienti', c.id);
+  S.clienti = S.clienti.filter(x => String(x.id) !== String(c.id));
+  log('Eliminato cliente scommesse', 'cliente_bet', c.nome);
+  toast('Cliente eliminato');
+  render();
 }
 
 async function eliminaTuttiClientiBet(){
   if (!confirm("ATTENZIONE: Sei sicuro di voler eliminare TUTTI i clienti scommesse? L'operazione non è reversibile!")) return;
-  try {
-    const C = getCOL();
-    const betClients = S.clienti.filter(x => x.tipo === 'bet');
-    for (const c of betClients) {
-      deleteDoc(doc(db, C.clienti, String(c.id))).catch(err);
-    }
-    S.clienti = S.clienti.filter(x => x.tipo !== 'bet');
-    log('Eliminati tutti i clienti scommesse', 'clienti_bet', 'Tutti i clienti scommesse eliminati');
-    save();
-    toast('Tutti i clienti scommesse sono stati eliminati');
-    render();
-  } catch(e) { err(e); }
+  const betClients = S.clienti.filter(x => x.tipo === 'bet');
+  for (const c of betClients) {
+    removeDoc('clienti', c.id);
+  }
+  S.clienti = S.clienti.filter(x => x.tipo !== 'bet');
+  log('Eliminati tutti i clienti scommesse', 'clienti_bet', 'Tutti i clienti scommesse eliminati');
+  toast('Tutti i clienti scommesse sono stati eliminati');
+  render();
 }
 
 function modificaNomeClienteBet(c){
@@ -965,14 +962,16 @@ function modificaNomeClienteBet(c){
     }
 
     c.nome = newName;
+    saveDoc('clienti', c);
+
     (S.bet_mov || []).forEach(m => {
       if(m.cliente && m.cliente.trim().toLowerCase() === oldName.trim().toLowerCase()){
         m.cliente = newName;
+        saveDoc('bet_mov', m);
       }
     });
 
     log('Modifica nome cliente scommesse', oldName, `Nuovo nome: ${newName}`);
-    save();
     toast('Nome cliente aggiornato');
     render();
   });
@@ -992,8 +991,8 @@ function modificaMovimentoBetModal(m){
     m.imp = newImp;
     m.causale = v.m.trim();
 
+    saveDoc('bet_mov', m);
     log('Modifica movimento scommesse', m.cliente || 'cassa', `Da ${eur(oldImp)} a ${eur(newImp)} – ${v.m.trim()}`);
-    save();
     toast('Movimento scommesse aggiornato');
     render();
   });
@@ -1001,16 +1000,11 @@ function modificaMovimentoBetModal(m){
 
 async function eliminaMovimentoBet(m){
   if(!confirm(`Sei sicuro di voler eliminare/stornare questa operazione di ${eur(m.imp)} per ${m.cliente}?`)) return;
-  try {
-    const C = getCOL();
-    deleteDoc(doc(db, C.bet_mov, String(m.id))).catch(err);
-    S.bet_mov = (S.bet_mov || []).filter(x => x.id !== m.id);
-    if(last.bet_mov) delete last.bet_mov[String(m.id)];
-    log('Storno/Eliminazione movimento scommesse', m.cliente || 'cassa', `${eur(m.imp)} – ${m.causale || ''}`);
-    save();
-    toast('Operazione stornata / eliminata');
-    render();
-  } catch(e) { err(e); }
+  removeDoc('bet_mov', m.id);
+  S.bet_mov = (S.bet_mov || []).filter(x => String(x.id) !== String(m.id));
+  log('Storno/Eliminazione movimento scommesse', m.cliente || 'cassa', `${eur(m.imp)} – ${m.causale || ''}`);
+  toast('Operazione stornata / eliminata');
+  render();
 }
 
 function movBet(tipo){
@@ -1028,8 +1022,7 @@ function movBet(tipo){
       alert('errore, inserire la nota');
       return false;
     }
-    S.bet_mov = S.bet_mov || [];
-    S.bet_mov.push({
+    const mObj = {
       id: nid('bm'),
       s: activeShift.id,
       sNum: tnBet(activeShift.id),
@@ -1040,9 +1033,11 @@ function movBet(tipo){
       tipo: tipo,
       imp: i,
       causale: v.m.trim()
-    });
+    };
+    S.bet_mov = S.bet_mov || [];
+    S.bet_mov.push(mObj);
+    saveDoc('bet_mov', mObj);
     log('Movimento scommesse ' + tipo, 'cassa_bet', `${eur(i)} – ${v.m.trim()}`);
-    save();
     toast(`Movimento di ${tipo} scommesse registrato`);
     render();
   });
@@ -1055,8 +1050,8 @@ function apriBet(){
     const s = { id: nid('bt'), da: me.id, dan: me.nome, ap: Date.now(), fondo: f, ch: null };
     S.bet_ses = S.bet_ses || [];
     S.bet_ses.push(s);
+    saveDoc('bet_ses', s);
     log('Apertura turno', 'turno ' + tnBet(s.id), 'Fondo ' + eur(f));
-    save();
     toast('Turno aperto con fondo ' + eur(f));
     render();
   });
@@ -1087,8 +1082,8 @@ function chiudiBet(){
       if (!r.value) { alert('Inserisci il contante contato'); return false; }
       const re = par(r.value);
       Object.assign(s, { ch: Date.now(), chn: me.nome, chiusa: me.id, reale: re, teo: t.teo, diff: re - t.teo, nota: n.value.trim() });
+      saveDoc('bet_ses', s);
       log('Chiusura turno', 'turno ' + tnBet(s.id), `Teorico ${eur(t.teo)}, contato ${eur(re)}, diff ${eur(re - t.teo)}`);
-      save();
       toast('Turno chiuso. Differenza: ' + eur(s.diff));
       render();
     }, 'r']
@@ -1097,47 +1092,33 @@ function chiudiBet(){
 
 async function deleteBetSes(shiftId){
   if(!confirm(`Sei sicuro di voler eliminare il Turno #${tnBet(shiftId)} e tutti i suoi movimenti?`)) return;
-  try {
-    const C = getCOL();
-    const sidStr = String(shiftId);
-    deleteDoc(doc(db, C.bet_ses, sidStr)).catch(err);
+  removeDoc('bet_ses', shiftId);
 
-    const movsToDelete = (S.bet_mov || []).filter(x => x.s === shiftId);
-    movsToDelete.forEach(mo => deleteDoc(doc(db, C.bet_mov, String(mo.id))).catch(err));
+  const movsToDelete = (S.bet_mov || []).filter(x => String(x.s) === String(shiftId));
+  movsToDelete.forEach(mo => removeDoc('bet_mov', mo.id));
 
-    S.bet_ses = (S.bet_ses || []).filter(x => x.id !== shiftId);
-    S.bet_mov = (S.bet_mov || []).filter(x => x.id !== shiftId);
+  S.bet_ses = (S.bet_ses || []).filter(x => String(x.id) !== String(shiftId));
+  S.bet_mov = (S.bet_mov || []).filter(x => String(x.s) !== String(shiftId));
 
-    if(last.bet_ses) delete last.bet_ses[sidStr];
-    movsToDelete.forEach(mo => { if(last.bet_mov) delete last.bet_mov[String(mo.id)]; });
-
-    log('Eliminato turno scommesse', 'turno_bet #' + tnBet(shiftId), `Turno ID ${shiftId}`);
-    save();
-    toast('Turno scommesse eliminato');
-    render();
-  } catch(e) { err(e); }
+  log('Eliminato turno scommesse', 'turno_bet #' + tnBet(shiftId), `Turno ID ${shiftId}`);
+  toast('Turno scommesse eliminato');
+  render();
 }
 
 async function deleteAllBetSes(){
   if(!confirm("ATTENZIONE: Sei sicuro di voler eliminare TUTTI i turni scommesse e i relativi movimenti? L'operazione non è reversibile!")) return;
-  try {
-    const C = getCOL();
-    const sesIds = (S.bet_ses || []).map(x => String(x.id));
-    const movIds = (S.bet_mov || []).map(x => String(x.id));
+  const sesIds = (S.bet_ses || []).map(x => x.id);
+  const movIds = (S.bet_mov || []).map(x => x.id);
 
-    for(const id of sesIds) deleteDoc(doc(db, C.bet_ses, id)).catch(err);
-    for(const id of movIds) deleteDoc(doc(db, C.bet_mov, id)).catch(err);
+  for(const id of sesIds) removeDoc('bet_ses', id);
+  for(const id of movIds) removeDoc('bet_mov', id);
 
-    S.bet_ses = [];
-    S.bet_mov = [];
-    if(last.bet_ses) last.bet_ses = {};
-    if(last.bet_mov) last.bet_mov = {};
+  S.bet_ses = [];
+  S.bet_mov = [];
 
-    log('Eliminati tutti i turni scommesse', 'turni_bet', 'Tutti i turni scommesse cancellati');
-    save();
-    toast('Tutti i turni scommesse sono stati eliminati');
-    render();
-  } catch(e) { err(e); }
+  log('Eliminati tutti i turni scommesse', 'turni_bet', 'Tutti i turni scommesse cancellati');
+  toast('Tutti i turni scommesse sono stati eliminati');
+  render();
 }
 
 function mostraOperazioniTurnoBet(s){
@@ -1425,7 +1406,7 @@ function betStoricoView(m){
 function opsScommesse(shiftId = null){
   let list = [...(S.bet_mov || [])];
   if (shiftId) {
-    list = list.filter(x => x.s === shiftId);
+    list = list.filter(x => String(x.s) === String(shiftId));
   }
   list.sort((a,b) => b.t - a.t);
   const container = E('div', {});
@@ -1524,6 +1505,7 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
         cliName = inputNewClient.value.trim();
         const newC = { id: nid('cli'), nome: cliName, tel: '', sospeso: 0, storico: [], tipo: 'bet' };
         S.clienti.push(newC);
+        saveDoc('clienti', newC);
       } else {
         const found = betClients.find(x => String(x.id) === String(selectClient.value));
         if (!found) { alert('Seleziona un cliente.'); return false; }
@@ -1547,8 +1529,7 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
         return false;
       }
 
-      S.bet_mov = S.bet_mov || [];
-      S.bet_mov.push({
+      const mObj = {
         id: nid('bm'),
         s: activeShift.id,
         sNum: tnBet(activeShift.id),
@@ -1561,20 +1542,23 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
         causale: causaleFinale,
         daniloNoCassa: checkDanilo.checked,
         pagatoContantiBanco: checkPagatoBanco.checked
-      });
+      };
+
+      S.bet_mov = S.bet_mov || [];
+      S.bet_mov.push(mObj);
+      saveDoc('bet_mov', mObj);
 
       log('Scommessa ' + tipoOp, cliName, `${eur(imp)} – ${causaleFinale}`);
-      save();
       toast('Operazione scommesse registrata');
       render();
     }]
   ]);
 }
 
-function ops(sid,f){const L=[...S.sales.filter(x=>x.s===sid).map(x=>({...x,k:'vendita'})),...S.mov.filter(x=>x.s===sid).map(x=>({...x,k:x.tipo}))].filter(x=>(!f.o||(x.op==f.o))&&(!f.t||x.k===f.t)&&(!f.p||(x.items||[]).some(i=>i.n.toLowerCase().includes(f.p.toLowerCase())))&&(!f.d||new Date(x.t).toLocaleDateString('en-CA')===f.d)).sort((a,b)=>b.t-a.t),w=E('div',{});
+function ops(sid,f){const L=[...S.sales.filter(x=>String(x.s)===String(sid)).map(x=>({...x,k:'vendita'})),...S.mov.filter(x=>String(x.s)===String(sid)).map(x=>({...x,k:x.tipo}))].filter(x=>(!f.o||(String(x.op)===String(f.o)))&&(!f.t||x.k===f.t)&&(!f.p||(x.items||[]).some(i=>i.n.toLowerCase().includes(f.p.toLowerCase())))&&(!f.d||new Date(x.t).toLocaleDateString('en-CA')===f.d)).sort((a,b)=>b.t-a.t),w=E('div',{});
  if(!L.length)w.append(E('div',{class:'mu'},'Nessuna operazione.'));
- L.forEach(x=>{const sale=x.k==='vendita',stt=sale?S.mov.some(m=>m.rif===x.id)?(x.items.every(i=>done(x,i.pid)>=i.q)?' · STORNATA':' · storno parziale'):'':'';
-  const sg=x.k==='storno'||x.k==='uscita'?-1:1,op=S.users.find(u=>u.id===x.op)?.nome||x.opn||'';
+ L.forEach(x=>{const sale=x.k==='vendita',stt=sale?S.mov.some(m=>String(m.rif)===String(x.id))?(x.items.every(i=>done(x,i.pid)>=i.q)?' · STORNATA':' · storno parziale'):'':'';
+  const sg=x.k==='storno'||x.k==='uscita'?-1:1,op=S.users.find(u=>String(u.id)===String(x.op))?.nome||x.opn||'';
   const isInc = x.isIncassoDebito || (x.motivo && x.motivo.toLowerCase().includes('incasso'));
   const labelEntrata = isInc ? 'Debito incassato' : 'Entrata manuale';
   w.append(E('div',{class:'cd'},E('div',{class:'row',style:'border:0'},E('b',{},sale?`Vendita ${vn(x.id)}${stt}${x.sospesoCliente?' (SOSPESO: '+x.sospesoCliente+')':''}`:x.k==='storno'?`Storno di ${vn(x.rif)}`:x.k==='entrata'?labelEntrata:'Uscita manuale'),E('b',{class:sg<0?'neg':'pos'},eur(sg*(sale?x.tot:x.imp)))),E('div',{class:'sm mu'},`${dt(x.t)} · ${op}${x.motivo?' · Motivo: '+x.motivo:''}`),x.items&&E('div',{class:'sm'},x.items.map(i=>i.q+'× '+i.n).join(', ')),sale&&!f.ro&&cur()?.id===sid&&E('button',{class:'b g s',style:'margin-top:6px',onclick:()=>storno(x)},'Storna / correggi')))});return w}
@@ -1584,14 +1568,14 @@ function storno(sale){const q={};sale.items.forEach(i=>q[i.pid]=0);const body=E(
  sale.items.forEach(i=>{const r=i.q-done(sale,i.pid),n=E('span',{},'0');body.append(E('div',{class:'row'},E('span',{},`${i.n} (${eur(i.p)}) · stornabili ${r}`),E('span',{},E('button',{class:'b g s',onclick:()=>{q[i.pid]=Math.max(0,q[i.pid]-1);n.textContent=q[i.pid];upd()}},'−'),' ',n,' ',E('button',{class:'b g s',onclick:()=>{q[i.pid]=Math.min(r,q[i.pid]+1);n.textContent=q[i.pid];upd()}},'+'))))});
  body.append(fl('Motivo (obbligatorio)',mot),note,E('div',{style:'margin-top:8px'},tt));upd();
  modal(`Storna vendita ${vn(sale.id)}`,body,[['Annulla',null,'g'],['Conferma storno',()=>{const it=sale.items.filter(i=>q[i.pid]>0).map(i=>({pid:i.pid,n:i.n,p:i.p,q:q[i.pid]})),imp=it.reduce((a,i)=>a+i.p*i.q,0),mt=mot.value==='Altro'?note.value.trim():mot.value+(note.value.trim()?' – '+note.value.trim():'');if(!imp||!mt){alert('Seleziona almeno un articolo e indica il motivo.');return false}
-  const id=nid('m');S.mov.push({id,s:sale.s,tipo:'storno',imp,op:me.id,opn:me.nome,t:Date.now(),motivo:mt,rif:sale.id,items:it});log('Storno','vendita '+vn(sale.id),`${eur(imp)} – ${mt}`);save();toast('Storno registrato: '+eur(imp))}]])}
+  const id=nid('m');const mObj={id,s:sale.s,tipo:'storno',imp,op:me.id,opn:me.nome,t:Date.now(),motivo:mt,rif:sale.id,items:it};S.mov.push(mObj);saveDoc('mov', mObj);log('Storno','vendita '+vn(sale.id),`${eur(imp)} – ${mt}`);toast('Storno registrato: '+eur(imp))}]])}
 
-function mov(tipo){form(tipo==='entrata'?'Entrata manuale':'Uscita manuale',[{l:'Importo (€)',k:'i',m:'decimal'},{l:'Motivo (obbligatorio)',k:'m'}],v=>{const i=par(v.i);if(i<=0||!v.m){alert('Importo e motivo obbligatori');return false}S.mov.push({id:nid('m'),s:cur().id,tipo,imp:i,op:me.id,opn:me.nome,t:Date.now(),motivo:v.m});log('Movimento '+tipo,'cassa',`${eur(i)} – ${v.m}`);save();toast('Movimento registrato')})}
+function mov(tipo){form(tipo==='entrata'?'Entrata manuale':'Uscita manuale',[{l:'Importo (€)',k:'i',m:'decimal'},{l:'Motivo (obbligatorio)',k:'m'}],v=>{const i=par(v.i);if(i<=0||!v.m){alert('Importo e motivo obbligatori');return false}const mObj={id:nid('m'),s:cur().id,tipo,imp:i,op:me.id,opn:me.nome,t:Date.now(),motivo:v.m};S.mov.push(mObj);saveDoc('mov', mObj);log('Movimento '+tipo,'cassa',`${eur(i)} – ${v.m}`);toast('Movimento registrato')})}
 
-function fondoMod(){const s=cur();form('Modifica fondo cassa',[{l:'Nuovo fondo (€)',k:'f',m:'decimal',v:(s.fondo/100).toFixed(2).replace('.',',')},{l:'Motivo',k:'m'}],v=>{const f=par(v.f);if(f<0||!v.m){alert('Motivo obbligatorio');return false}log('Cambio fondo','turno '+tn(s.id),`${eur(s.fondo)} → ${eur(f)} – ${v.m}`);s.fondo=f;save();toast('Fondo aggiornato')})}
+function fondoMod(){const s=cur();form('Modifica fondo cassa',[{l:'Nuovo fondo (€)',k:'f',m:'decimal',v:(s.fondo/100).toFixed(2).replace('.',',')},{l:'Motivo',k:'m'}],v=>{const f=par(v.f);if(f<0||!v.m){alert('Motivo obbligatorio');return false}log('Cambio fondo','turno '+tn(s.id),`${eur(s.fondo)} → ${eur(f)} – ${v.m}`);s.fondo=f;saveDoc('ses', s);toast('Fondo aggiornato')})}
 
 function chiudi(){const s=cur(),t=tot(s),r=E('input',{inputmode:'decimal',placeholder:'0,00'}),n=E('input',{placeholder:'Nota (facoltativa)'}),d=E('b',{});r.oninput=()=>{const x=par(r.value)-t.teo;d.className=x<0?'neg':x>0?'pos':'';d.textContent='Differenza: '+eur(x)};d.textContent='Differenza: –';
- modal('Chiusura cassa',E('div',{},E('div',{class:'row'},'Contante teorico',E('b',{},eur(t.teo))),fl('Contante réellement contato (€)',r),E('div',{style:'margin:8px 0'},d),fl('Nota',n)),[['Annulla',null,'g'],['Chiudi e azzera',()=>{if(!r.value){alert('Inserisci il contante contato');return false}const re=par(r.value);Object.assign(s,{ch:Date.now(),chn:me.nome,chiusa:me.id,reale:re,teo:t.teo,diff:re-t.teo,nota:n.value.trim()});log('Chiusura turno','turno '+tn(s.id),`Teorico ${eur(t.teo)}, contato ${eur(re)}, differenza ${eur(re-t.teo)}`);save();toast('Turno chiuso. Differenza: '+eur(s.diff))},'r']])}
+ modal('Chiusura cassa',E('div',{},E('div',{class:'row'},'Contante teorico',E('b',{},eur(t.teo))),fl('Contante réellement contato (€)',r),E('div',{style:'margin:8px 0'},d),fl('Nota',n)),[['Annulla',null,'g'],['Chiudi e azzera',()=>{if(!r.value){alert('Inserisci il contante contato');return false}const re=par(r.value);Object.assign(s,{ch:Date.now(),chn:me.nome,chiusa:me.id,reale:re,teo:t.teo,diff:re-t.teo,nota:n.value.trim()});saveDoc('ses', s);log('Chiusura turno','turno '+tn(s.id),`Teorico ${eur(t.teo)}, contato ${eur(re)}, differenza ${eur(re-t.teo)}`);toast('Turno chiuso. Differenza: '+eur(s.diff))},'r']])}
 
 function csv(rows){return'\ufeff'+rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(';')).join('\n')}
 
@@ -1599,60 +1583,44 @@ async function dl(name,data){try{const d=await window.claude?.use('downloads');i
 
 async function deleteSes(shiftId){
  if(!confirm(`Sei sicuro di voler eliminare il Turno #${tn(shiftId)} e tutte le sue operazioni?`)) return;
- try {
-  const C = getCOL();
-  const sidStr = String(shiftId);
-  deleteDoc(doc(db, C.ses, sidStr)).catch(err);
+ removeDoc('ses', shiftId);
 
-  const salesToDelete = S.sales.filter(x => x.s === shiftId);
-  const movToDelete = S.mov.filter(x => x.s === shiftId);
-  salesToDelete.forEach(sa => deleteDoc(doc(db, C.sales, String(sa.id))).catch(err));
-  movToDelete.forEach(mo => deleteDoc(doc(db, C.mov, String(mo.id))).catch(err));
+ const salesToDelete = S.sales.filter(x => String(x.s) === String(shiftId));
+ const movToDelete = S.mov.filter(x => String(x.s) === String(shiftId));
+ salesToDelete.forEach(sa => removeDoc('sales', sa.id));
+ movToDelete.forEach(mo => removeDoc('mov', mo.id));
 
-  S.ses = S.ses.filter(x => x.id !== shiftId);
-  for(const k of ['sales','mov']){
-    part[k].cur = part[k].cur.filter(x => x.s !== shiftId);
-    part[k].hist = part[k].hist.filter(x => x.s !== shiftId);
-  }
-  merge();
+ S.ses = S.ses.filter(x => String(x.id) !== String(shiftId));
+ for(const k of ['sales','mov']){
+   part[k].cur = part[k].cur.filter(x => String(x.s) !== String(shiftId));
+   part[k].hist = part[k].hist.filter(x => String(x.s) !== String(shiftId));
+ }
+ merge();
 
-  if(last.ses) delete last.ses[sidStr];
-  salesToDelete.forEach(sa => { if(last.sales) delete last.sales[String(sa.id)]; });
-  movToDelete.forEach(mo => { if(last.mov) delete last.mov[String(mo.id)]; });
-
-  log('Eliminato turno', 'turno #' + tn(shiftId), `Turno ID ${shiftId}`);
-  save();
-  toast('Turno eliminato');
-  render();
- } catch(e) { err(e); }
+ log('Eliminato turno', 'turno #' + tn(shiftId), `Turno ID ${shiftId}`);
+ toast('Turno eliminato');
+ render();
 }
 
 async function deleteAllSes(){
  if(!confirm("ATTENZIONE: Sei sicuro di voler eliminare TUTTI i turni e le relative vendite e movimenti? L'operazione non è reversibile!")) return;
- try {
-  const C = getCOL();
-  const sesIds = S.ses.map(x => String(x.id));
-  const salesIds = S.sales.map(x => String(x.id));
-  const movIds = S.mov.map(x => String(x.id));
+ const sesIds = S.ses.map(x => x.id);
+ const salesIds = S.sales.map(x => x.id);
+ const movIds = S.mov.map(x => x.id);
 
-  for(const id of sesIds) deleteDoc(doc(db, C.ses, id)).catch(err);
-  for(const id of salesIds) deleteDoc(doc(db, C.sales, id)).catch(err);
-  for(const id of movIds) deleteDoc(doc(db, C.mov, id)).catch(err);
+ for(const id of sesIds) removeDoc('ses', id);
+ for(const id of salesIds) removeDoc('sales', id);
+ for(const id of movIds) removeDoc('mov', id);
 
-  S.ses = [];
-  part.sales.cur = []; part.sales.hist = [];
-  part.mov.cur = []; part.mov.hist = [];
-  S.sales = []; S.mov = [];
+ S.ses = [];
+ part.sales.cur = []; part.sales.hist = [];
+ part.mov.cur = []; part.mov.hist = [];
+ S.sales = []; S.mov = [];
+ curId = null;
 
-  last.ses = {}; last.sales = {}; last.mov = {};
-  LD = new Set();
-  curId = null;
-
-  log('Eliminati tutti i turni', 'turni', 'Tutti i turni cancellati');
-  save();
-  toast('Tutti i turni sono stati eliminati');
-  render();
- } catch(e) { err(e); }
+ log('Eliminati tutti i turni', 'turni', 'Tutti i turni cancellati');
+ toast('Tutti i turni sono stati eliminati');
+ render();
 }
 
 async function mostraOperazioniTurno(s){
@@ -1703,16 +1671,16 @@ function storico(m){
   E('div',{class:'f'},sel('s','Turno…',S.ses.map(s=>[s.id,'Turno '+tn(s.id)])),sel('o','Operatore…',S.users.map(u=>[u.id,u.nome])),sel('t','Tipo…',['vendita','storno','entrata','uscita'].map(x=>[x,x])),E('input',{id:'prod-search-input',placeholder:'Prodotto…',v:F.p,onchange:e=>{F.p=e.target.value;render()}}),E('input',{type:'date',v:F.d,onchange:e=>{F.d=e.target.value;render()}}),E('button',{class:'b g s',onclick:()=>{F={s:'',o:'',t:'',p:'',d:''};render()}},'Azzera filtri'))
  );
  if(!F.s&&S.ses.length)F.s=S.ses[S.ses.length-1].id;const ss=F.s?[+F.s]:[];loadSes(+F.s);ss.forEach(id=>m.append(E('div',{class:'mu sm'},'Turno '+tn(id)),ops(id,{...F,ro:1})));
- const ex=[['Turno','Tipo','Id','Data','Operatore','Importo €','Motivo','Dettaglio']];S.ses.forEach(s=>{S.sales.filter(x=>x.s===s.id).forEach(x=>ex.push([tn(s.id),'vendita',vn(x.id),dt(x.t),x.opn,x.tot/100,'',x.items.map(i=>i.q+'x '+i.n).join(', ')]));S.mov.filter(x=>x.s===s.id).forEach(x=>ex.push([tn(s.id),x.tipo,vn(x.id),dt(x.t),x.opn,x.imp/100,x.motivo,(x.items||[]).map(i=>i.q+'x '+i.n).join(', ')||'rif. '+vn(x.rif)]))});
+ const ex=[['Turno','Tipo','Id','Data','Operatore','Importo €','Motivo','Dettaglio']];S.ses.forEach(s=>{S.sales.filter(x=>String(x.s)===String(s.id)).forEach(x=>ex.push([tn(s.id),'vendita',vn(x.id),dt(x.t),x.opn,x.tot/100,'',x.items.map(i=>i.q+'x '+i.n).join(', ')]));S.mov.filter(x=>String(x.s)===String(s.id)).forEach(x=>ex.push([tn(s.id),x.tipo,vn(x.id),dt(x.t),x.opn,x.imp/100,x.motivo,(x.items||[]).map(i=>i.q+'x '+i.n).join(', ')||'rif. '+vn(x.rif)]))});
  m.append(E('button',{class:'b g',onclick:()=>dl('operazioni.csv',csv(ex))},'⬇ Esporta operazioni CSV'),' ',E('button',{class:'b g',onclick:()=>dl('turni.csv',csv([['Turno','Apertura','Aperto da','Fondo','Teorico','Contato','Differenza','Chiusura','Chiuso da','Nota'],...S.ses.map(s=>[tn(s.id),dt(s.ap),s.dan,s.fondo/100,s.teo!=null?s.teo/100:tot(s).teo/100,s.reale!=null?s.reale/100:'',s.diff!=null?s.diff/100:'',s.ch?dt(s.ch):'',s.chn||'',s.nota||''])]))},'⬇ Esporta turni CSV'));
- m.append(E('h3',{},'Registro attività'),...[...S.audit].reverse().slice(0,150).filter(a=>!F.o||a.u==F.o).map(a=>E('div',{class:'row sm'},E('span',{},E('b',{},a.az),' · '+a.ent+' · '+a.det),E('span',{class:'mu'},a.n+' · '+dt(a.t)))))}
+ m.append(E('h3',{},'Registro attività'),...[...S.audit].reverse().slice(0,150).filter(a=>!F.o||String(a.u)===String(F.o)).map(a=>E('div',{class:'row sm'},E('span',{},E('b',{},a.az),' · '+a.ent+' · '+a.det),E('span',{class:'mu'},a.n+' · '+dt(a.t)))))}
 
 function admin(m){
- m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;S.cats.push({id:nid('c'),nome:v.n,att:1});log('Nuova categoria','categoria',v.n);save();render()})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:[...S.cats].sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;S.prods.push({id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1});log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`);save();render()})},'+ Prodotto')));
+ m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;const cObj={id:nid('c'),nome:v.n,att:1};S.cats.push(cObj);saveDoc('cats', cObj);log('Nuova categoria','categoria',v.n);render()})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:[...S.cats].sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;const pObj={id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1};S.prods.push(pObj);saveDoc('prods', pObj);log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`);render()})},'+ Prodotto')));
  S.cats.sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).forEach(c=>{
-  const catProds=S.prods.filter(p=>p.c===c.id).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));
+  const catProds=S.prods.filter(p=>String(p.c)===String(c.id)).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));
   const d=E('div',{class:'cd'},E('b',{},c.nome+(c.att?'':' (disattiva)')));
-  d.append(E('div',{class:'f'},E('button',{class:'b g s',onclick:()=>{c.att=c.att?0:1;log(c.att?'Categoria riattivata':'Categoria disattivata','categoria',c.nome);save();render()}},c.att?'Disattiva categoria':'Riattiva categoria')));
+  d.append(E('div',{class:'f'},E('button',{class:'b g s',onclick:()=>{c.att=c.att?0:1;saveDoc('cats', c);log(c.att?'Categoria riattivata':'Categoria disattivata','categoria',c.nome);render()}},c.att?'Disattiva categoria':'Riattiva categoria')));
   catProds.forEach(p=>{
    d.append(E('div',{class:'row'},
     E('span',{},p.nome+' · '+eur(p.p)+(p.att?'':' (disattivo)')),
@@ -1720,11 +1688,11 @@ function admin(m){
      E('button',{class:'b g s',onclick:()=>{
       form('Modifica prodotto',[{l:'Nome',k:'n',v:p.nome},{l:'Prezzo (€)',k:'p',m:'decimal',v:(p.p/100).toFixed(2).replace('.',',')}],v=>{
        if(!v.n||par(v.p)<=0)return false;
-       p.nome=v.n;p.p=par(v.p);log('Modifica prodotto','prodotto',`${v.n} ${eur(p.p)}`);save();render();
+       p.nome=v.n;p.p=par(v.p);saveDoc('prods', p);log('Modifica prodotto','prodotto',`${v.n} ${eur(p.p)}`);render();
       })
      }},'Modifica'),
      ' ',
-     E('button',{class:'b g s',onclick:()=>{p.att=p.att?0:1;log(p.att?'Prodotto riattivato':'Prodotto disattivato','prodotto',p.nome);save();render()}},p.att?'Disattiva':'Riattiva')
+     E('button',{class:'b g s',onclick:()=>{p.att=p.att?0:1;saveDoc('prods', p);log(p.att?'Prodotto riattivato':'Prodotto disattivato','prodotto',p.nome);render()}},p.att?'Disattiva':'Riattiva')
     )
    ))
   });
@@ -1741,7 +1709,7 @@ function admin(m){
    ...S.users.map(u=>E('div',{class:'cd'},
     E('div',{class:'row',style:'border:0'},
      E('b',{},u.nome+' ('+RN[u.ruolo]+')'+(u.att?'':' (disattivo)')),
-     u.id!==me.id?E('button',{class:'b g s',onclick:()=>{u.att=u.att?0:1;log(u.att?'Utente riattivato':'Utente disattivato','utente',u.nome);save();render()}},u.att?'Disattiva':'Riattiva'):null
+     u.id!==me.id?E('button',{class:'b g s',onclick:()=>{u.att=u.att?0:1;saveDoc('users', u);log(u.att?'Utente riattivato':'Utente disattivato','utente',u.nome);render()}},u.att?'Disattiva':'Riattiva'):null
     )
    ))
   )
