@@ -713,7 +713,17 @@ function getBetClientStats(clientName){
       pag += m.imp;
     }
   });
-  const saldoNetto = (deb + pag) - (inc + acc);
+
+  // 1. L'incasso riduce prima i debiti creati (deb)
+  const remainingDeb = Math.max(0, deb - inc);
+  const extraInc = Math.max(0, inc - deb);
+
+  // 2. L'incasso in eccesso scala il credito a favore del cliente (acc)
+  const netAcc = Math.max(0, acc - extraInc);
+  const overpayment = Math.max(0, extraInc - acc);
+
+  // Saldo netto: (Debiti residui + Pagamenti da cassa + overpayment) - Credito residuo
+  const saldoNetto = (remainingDeb + pag + overpayment) - netAcc;
   const debitoResiduo = Math.max(0, saldoNetto);
   return { saldoNetto, debitoResiduo, totAccrediti: currAcc };
 }
