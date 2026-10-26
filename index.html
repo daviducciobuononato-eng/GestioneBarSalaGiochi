@@ -50,7 +50,7 @@ dtFull=t=>{const d=new Date(t);return isNaN(d)?'':d.toLocaleString('it-IT',{week
 RN={prop:'Proprietario',resp:'Responsabile',dip:'Dipendente'},
 PM={fondo:['prop','resp'],chiudi:['prop','resp'],catalogo:['prop','resp'],storico:['prop','resp'],utenti:['prop'],clienti:['prop','resp','dip']},
 X0=0;
-let S={users:[],cats:[],prods:[],ses:[],sales:[],mov:[],audit:[],clienti:[],bet_mov:[],bet_ses:[]},me=null,tab='v',cat=null,cart={},pin='',idle,msg='',F={s:'',o:'',t:'',p:'',d:'',hideBetClients:false};
+let S={users:[],cats:[],prods:[],ses:[],sales:[],mov:[],audit:[],clienti:[],bet_mov:[],bet_ses:[]},me=null,tab='v',cat=null,cart={},pin='',idle,msg='',F={s:'',o:'',t:'',p:'',d:'',hideBetClients:false,sBet:'',sBetRaw:''};
 let isTestMode=false;
 let activeModule=null;
 
@@ -397,7 +397,14 @@ function selectModuleScreen(){
 }
 
 function render(){
- clearTimeout(idle);const a=$('#app');a.replaceChildren();
+ clearTimeout(idle);
+ 
+ const activeEl = document.activeElement;
+ const activeId = activeEl && activeEl.id ? activeEl.id : null;
+ const selStart = (activeEl && 'selectionStart' in activeEl) ? activeEl.selectionStart : null;
+ const selEnd = (activeEl && 'selectionEnd' in activeEl) ? activeEl.selectionEnd : null;
+
+ const a=$('#app');a.replaceChildren();
  if(!me){a.append(login());return}
  idle=setTimeout(()=>{lock()},120000);
 
@@ -454,6 +461,16 @@ function render(){
      ['k_turno','🎰 Turno'],
      ['k_storico','📊 Storico']
    ].map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))));
+ }
+
+ if (activeId) {
+   const elToFocus = document.getElementById(activeId);
+   if (elToFocus) {
+     elToFocus.focus();
+     if (selStart !== null && selEnd !== null && 'setSelectionRange' in elToFocus) {
+       try { elToFocus.setSelectionRange(selStart, selEnd); } catch(e){}
+     }
+   }
  }
 }
 ['pointerdown','keydown'].forEach(e=>addEventListener(e,()=>{if(me){clearTimeout(idle);idle=setTimeout(()=>{lock()},120000)}}));
@@ -1190,12 +1207,14 @@ function betClientiView(m){
 
   if (!F.hideBetClients) {
     const searchInput = E('input', {
+      id: 'bet-search-input',
       type: 'search',
       placeholder: '🔍 Cerca cliente scommesse per nome...',
-      v: F.sBet || '',
+      v: F.sBetRaw || '',
       style: 'width:100%;padding:12px;margin-bottom:16px;border-radius:10px;border:1px solid var(--ln);background:var(--cd);color:var(--fg);font-size:16px;font-weight:600;',
       oninput: (e) => {
-        F.sBet = e.target.value.toLowerCase();
+        F.sBetRaw = e.target.value;
+        F.sBet = e.target.value.toLowerCase().trim();
         renderClients();
       }
     });
@@ -1382,7 +1401,7 @@ function betStoricoView(m){
           ),
           E('div', {class:'sm'}, `Fondo ${eur(shift.fondo)} · Cassetto Teorico ${eur(shift.teo)} · Contato ${eur(shift.reale)}`),
           shift.diff != null ? E('b', {class: shift.diff < 0 ? 'neg' : shift.diff > 0 ? 'pos' : '', style:'display:block;margin-top:2px'}, 'Differenza cassa: ' + eur(shift.diff)) : null,
-          E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da ${shift.dan} · chiuso da ${shift.chn || '–'} il ${dt(shift.ch)}${shift.nota ? ' · Nota: ' + shift.nota :''}`),
+          E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da ${shift.dan} · chiuso da ${shift.chn || '–'} il ${dt(shift.ch)}${shift.nota ? ' · Nota: ' + shift.nota : ''}`),
           E('div', {class:'f', style:'margin-top:8px'},
             E('button', {class:'b g s', onclick: () => mostraOperazioniTurnoBet(shift)}, '📊 Report & Operazioni'),
             E('button', {class:'b r s', onclick: () => deleteBetSes(shift.id)}, '🗑️ Elimina')
@@ -1681,7 +1700,7 @@ function storico(m){
    )
   }),
   E('h3',{},'Operazioni Bar'),
-  E('div',{class:'f'},sel('s','Turno…',S.ses.map(s=>[s.id,'Turno '+tn(s.id)])),sel('o','Operatore…',S.users.map(u=>[u.id,u.nome])),sel('t','Tipo…',['vendita','storno','entrata','uscita'].map(x=>[x,x])),E('input',{placeholder:'Prodotto…',v:F.p,onchange:e=>{F.p=e.target.value;render()}}),E('input',{type:'date',v:F.d,onchange:e=>{F.d=e.target.value;render()}}),E('button',{class:'b g s',onclick:()=>{F={s:'',o:'',t:'',p:'',d:''};render()}},'Azzera filtri'))
+  E('div',{class:'f'},sel('s','Turno…',S.ses.map(s=>[s.id,'Turno '+tn(s.id)])),sel('o','Operatore…',S.users.map(u=>[u.id,u.nome])),sel('t','Tipo…',['vendita','storno','entrata','uscita'].map(x=>[x,x])),E('input',{id:'prod-search-input',placeholder:'Prodotto…',v:F.p,onchange:e=>{F.p=e.target.value;render()}}),E('input',{type:'date',v:F.d,onchange:e=>{F.d=e.target.value;render()}}),E('button',{class:'b g s',onclick:()=>{F={s:'',o:'',t:'',p:'',d:''};render()}},'Azzera filtri'))
  );
  if(!F.s&&S.ses.length)F.s=S.ses[S.ses.length-1].id;const ss=F.s?[+F.s]:[];loadSes(+F.s);ss.forEach(id=>m.append(E('div',{class:'mu sm'},'Turno '+tn(id)),ops(id,{...F,ro:1})));
  const ex=[['Turno','Tipo','Id','Data','Operatore','Importo €','Motivo','Dettaglio']];S.ses.forEach(s=>{S.sales.filter(x=>x.s===s.id).forEach(x=>ex.push([tn(s.id),'vendita',vn(x.id),dt(x.t),x.opn,x.tot/100,'',x.items.map(i=>i.q+'x '+i.n).join(', ')]));S.mov.filter(x=>x.s===s.id).forEach(x=>ex.push([tn(s.id),x.tipo,vn(x.id),dt(x.t),x.opn,x.imp/100,x.motivo,(x.items||[]).map(i=>i.q+'x '+i.n).join(', ')||'rif. '+vn(x.rif)]))});
