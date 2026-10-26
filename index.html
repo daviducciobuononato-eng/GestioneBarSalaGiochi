@@ -697,14 +697,26 @@ function getBetStatsShift(s){
 
 function getBetClientStats(clientName){
   const activeShift = curBet();
-  const movs = (S.bet_mov || []).filter(x => x.cliente && x.cliente.trim().toLowerCase() === clientName.trim().toLowerCase());
-  let deb = 0, inc = 0, acc = 0, pag = 0, currAcc = 0;
-  
+  const movs = (S.bet_mov || [])
+    .filter(x => x.cliente && x.cliente.trim().toLowerCase() === clientName.trim().toLowerCase())
+    .sort((a,b) => a.t - b.t);
+
+  let deb = 0, inc_pagamento_debito = 0, inc_giocata_banco = 0, acc = 0, pag = 0, currAcc = 0;
+
   movs.forEach(m => {
     if (m.tipo === 'debito') {
       if (!m.daniloNoCassa) deb += m.imp;
     } else if (m.tipo === 'incasso_debito') {
-      inc += m.imp;
+      // Calcola il saldo corrente prima di questo incasso
+      const saldoAttuale = (deb + inc_giocata_banco + pag) - (acc + inc_pagamento_debito);
+      
+      if (saldoAttuale > 0) {
+        // Se il cliente ha un debito aperto, l'incasso va a ridurre il debito
+        inc_pagamento_debito += m.imp;
+      } else {
+        // Se il cliente ha credito, l'incasso viene trattato come giocata al banco e scala il credito!
+        inc_giocata_banco += m.imp;
+      }
     } else if (m.tipo === 'accredito') {
       if (!m.daniloNoCassa) acc += m.imp;
       if (activeShift && m.s === activeShift.id) {
@@ -715,7 +727,7 @@ function getBetClientStats(clientName){
     }
   });
 
-  const saldoNetto = (deb + pag) - (inc + acc);
+  const saldoNetto = (deb + inc_giocata_banco + pag) - (acc + inc_pagamento_debito);
   const debitoResiduo = Math.max(0, saldoNetto);
   
   return { saldoNetto, debitoResiduo, totAccrediti: currAcc };
