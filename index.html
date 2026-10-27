@@ -1277,7 +1277,7 @@ function betTurnoView(m){
 
   const t = totBet(s);
   const incassoCassettoNetto = t.cassaIn - t.pag;
-  const totaleCerchioTurno = shiftStats.totDebiti + incassoCassettoNetto;
+  const totaleCerchioTurno = incassoCassettoNetto - shiftStats.totDebiti;
 
   m.append(
     E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
