@@ -48,11 +48,21 @@ par=s=>Math.round(parseFloat(String(s).replace(',','.'))*100)||0,
 dt=t=>new Date(t).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}),
 dtFull=t=>{const d=new Date(t);return isNaN(d)?'':d.toLocaleString('it-IT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})},
 RN={prop:'Proprietario',resp:'Responsabile',dip:'Dipendente'},
-PM={fondo:['prop','resp'],chiudi:['prop','resp'],catalogo:['prop','resp'],storico:['prop','resp'],utenti:['prop'],clienti:['prop','resp','dip']},
-X0=0;
+PM={fondo:['prop','resp'],chiudi:['prop','resp'],catalogo:['prop','resp'],storico:['prop','resp'],utenti:['prop'],clienti:['prop','resp','dip']};
+
 let S={users:[],cats:[],prods:[],ses:[],sales:[],mov:[],audit:[],clienti:[],bet_mov:[],bet_ses:[]},me=null,tab='v',cat=null,cart={},pin='',idle,msg='',F={s:'',o:'',t:'',p:'',d:'',hideBetClients:false,sBet:'',sBetRaw:''};
 let isTestMode=false;
 let activeModule=null;
+let renderScheduled=false;
+
+function scheduleRender(){
+  if(renderScheduled) return;
+  renderScheduled = true;
+  requestAnimationFrame(()=>{
+    renderScheduled = false;
+    render();
+  });
+}
 
 const can=a=>me&&PM[a].includes(me.ruolo);
 const isDavide=()=>me&&(me.nome.trim().toLowerCase()==='davide'||me.ruolo==='prop');
@@ -76,8 +86,8 @@ const cmp=(a,b)=>(String(a.id)>String(b.id))-(String(a.id)<String(b.id));
 let unsub=[],unsubSM=[],curId=null,part={sales:{cur:[],hist:[]},mov:{cur:[],hist:[]}},LD=new Set(),sel=null,needSetup=false,busy=false;
 const err=e=>{
   console.error("Errore Firebase:", e);
-  msg='⚠️ Errore salvataggio Cloud: '+(e.code||e.message);
-  render();
+  msg='⚠️ Errore Cloud: '+(e.code||e.message);
+  scheduleRender();
 };
 
 function saveDoc(colName, d){
@@ -103,7 +113,7 @@ function subSM(id){
   for(const k of['sales','mov']) unsubSM.push(onSnapshot(query(collection(db, C[k]), where('s','==',id)), sn=>{
     part[k].cur=sn.docs.map(d=>d.data());
     merge();
-    render();
+    scheduleRender();
   }, err));
 }
 
@@ -116,7 +126,7 @@ async function loadSes(id){
     part.sales.hist.push(...a.docs.map(d=>d.data()));
     part.mov.hist.push(...b.docs.map(d=>d.data()));
     merge();
-    render();
+    scheduleRender();
   }catch(e){LD.delete(id);err(e);}
 }
 
@@ -126,13 +136,14 @@ function start(){
   const L=(k,q,f)=>unsub.push(onSnapshot(q,sn=>{
     S[k]=sn.docs.map(d=>d.data()).sort(cmp);
     f&&f();
-    render();
+    scheduleRender();
   },err));
 
   L('cats',collection(db, C.cats));
   L('prods',collection(db, C.prods));
   L('clienti',collection(db, C.clienti));
-  L('bet_mov',collection(db, C.bet_mov));
+  // Limita a 100 movimenti scommesse per non esaurire la quota di letture
+  L('bet_mov',query(collection(db, C.bet_mov),orderBy('t','desc'),limit(100)));
   L('bet_ses',collection(db, C.bet_ses));
   L('ses',collection(db, C.ses),()=>{
     const c=cur()?.id||null;
@@ -162,14 +173,12 @@ function stop(){
   LD=new Set();
   curId=null;
 }
-
 function toggleTestMode(){
   isTestMode = !isTestMode;
   cart = {};
   stop();
   start();
-  toast(isTestMode ? '🧪 Passato ad AMBIENTE TEST (dati isolati)' : '✅ Tornato a DATI REALI');
-  render();
+  toast(isTestMode ? '🧪 Passato ad AMBIENTE TEST' : '✅ Tornato a DATI REALI');
 }
 
 let LI=0;const nid=()=>LI=Math.max(LI+1,Date.now()*100+Math.floor(Math.random()*100));
@@ -202,7 +211,7 @@ function lock(){
 
 async function authFlow(u){
   if(busy)return;
-  if(!u){stop();me=null;activeModule=null;return render()}
+  if(!u){stop();me=null;activeModule=null;return scheduleRender()}
   for(let i=0;i<50&&!S.users.some(x=>String(x.id)===String(u.uid));i++)await new Promise(r=>setTimeout(r,100));
   me=S.users.find(x=>String(x.id)===String(u.uid));if(!me||!me.att){await signOut(auth);msg='Utente non abilitato';return}
   
@@ -214,15 +223,20 @@ async function authFlow(u){
   }
   start();
   log('Accesso','utente',me.nome);
-  render();
+  scheduleRender();
 }
 
 async function boot(){
-  render();
-  onSnapshot(collection(db,'profili'),sn=>{S.users=sn.docs.map(d=>d.data()).sort(cmp);render()},err);
+  scheduleRender();
+  onSnapshot(collection(db,'profili'),sn=>{S.users=sn.docs.map(d=>d.data()).sort(cmp);scheduleRender()},err);
   try{needSetup=!(await getDoc(doc(db,'config','init'))).exists()}catch(e){}
   onAuthStateChanged(auth,authFlow);
-  render();
+  
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible' && me){
+      start();
+    }
+  });
 }
 
 async function setup(nome,p){
@@ -231,7 +245,7 @@ async function setup(nome,p){
     const email='titolare'+Math.floor(Math.random()*9e4+1e4)+'@bar.app',c=await createUserWithEmailAndPassword(auth,email,pw(p)),pr={id:c.user.uid,nome,ruolo:'prop',att:1,email},b=writeBatch(db);
     b.set(doc(db,'profili',pr.id),pr);b.set(doc(db,'config','init'),{t:Date.now()});await b.commit();
     const b2=writeBatch(db);LIST.split('\n').forEach(l=>{const[n,ps]=l.split('|'),cid=nid();b2.set(doc(db,'cats',String(cid)),{id:cid,nome:n,att:1});ps.split(/,(?=[^,]*:\d+(?:,|$))/).forEach(x=>{const i=x.lastIndexOf(':'),pid=nid();b2.set(doc(db,'prods',String(pid)),{id:pid,c:cid,nome:x.slice(0,i),p:+x.slice(i+1),att:1})})});await b2.commit();needSetup=false
-  }catch(e){msg='Errore: '+(e.code||e.message);busy=false;return render()}
+  }catch(e){msg='Errore: '+(e.code||e.message);busy=false;return scheduleRender()}
   busy=false;authFlow(auth.currentUser);
 }
 
@@ -243,7 +257,7 @@ async function newUser(nome,ruolo,p){
     const uObj = {id:c.user.uid,nome,ruolo,att:1,email};
     saveDoc('users', uObj);
     log('Nuovo utente','utente',`${nome} (${RN[ruolo]})`);
-    render();
+    scheduleRender();
   }catch(e){alert('Errore: '+(e.code||e.message));return false}
 }
 
@@ -260,13 +274,13 @@ const curBet=()=>(S.bet_ses||[]).find(s=>!s.ch);
 function vendita(m,s){
  if(!s){m.append(E('div',{class:'cd'},E('b',{},'Nessun turno aperto'),E('p',{class:'mu'},'Solo Proprietario o Responsabile possono aprire il turno.'),can('fondo')&&E('button',{class:'b',onclick:apri},'Apri turno e imposta fondo cassa')));return}
  const cs=S.cats.filter(c=>c.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));cat=cs.find(c=>String(c.id)===String(cat))?cat:cs[0]?.id;
- m.append(E('div',{class:'cats'},cs.map(c=>E('button',{class:String(c.id)===String(cat)?'on':'',onclick:()=>{cat=c.id;render()}},c.nome))),E('div',{class:'gr'},S.prods.filter(p=>String(p.c)===String(cat)&&p.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(p=>E('button',{onclick:()=>{cart[p.id]=(cart[p.id]||0)+1;render()}},p.nome,E('small',{},eur(p.p))))));
+ m.append(E('div',{class:'cats'},cs.map(c=>E('button',{class:String(c.id)===String(cat)?'on':'',onclick:()=>{cat=c.id;scheduleRender()}},c.nome))),E('div',{class:'gr'},S.prods.filter(p=>String(p.c)===String(cat)&&p.att).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(p=>E('button',{onclick:()=>{cart[p.id]=(cart[p.id]||0)+1;scheduleRender()}},p.nome,E('small',{},eur(p.p))))));
  const ids=Object.keys(cart),T=ids.reduce((a,i)=>a+cart[i]*S.prods.find(p=>String(p.id)==String(i)).p,0);
  const cd=E('div',{class:'cd',style:'margin-top:14px'},E('b',{},'Conto'),ids.length?'':E('div',{class:'mu'},'Tocca i prodotti per aggiungerli'));
- ids.forEach(i=>{const p=S.prods.find(x=>String(x.id)==String(i));cd.append(E('div',{class:'row'},E('span',{},p.nome),E('span',{},E('button',{class:'b g s',onclick:()=>{cart[i]--;if(!cart[i])delete cart[i];render()}},'−'),' '+cart[i]+' ',E('button',{class:'b g s',onclick:()=>{cart[i]++;render()}},'+'),' '+eur(cart[i]*p.p))))});
+ ids.forEach(i=>{const p=S.prods.find(x=>String(x.id)==String(i));cd.append(E('div',{class:'row'},E('span',{},p.nome),E('span',{},E('button',{class:'b g s',onclick:()=>{cart[i]--;if(!cart[i])delete cart[i];scheduleRender()}},'−'),' '+cart[i]+' ',E('button',{class:'b g s',onclick:()=>{cart[i]++;scheduleRender()}},'+'),' '+eur(cart[i]*p.p))))});
  if(ids.length){const r=E('input',{inputmode:'decimal',placeholder:'Contanti ricevuti (facoltativo)'}),rs=E('div',{class:'mu'},'Resto: –');r.oninput=()=>{const c=par(r.value);rs.textContent=r.value?(c>=T?'Resto: '+eur(c-T):'Mancano '+eur(T-c)):'Resto: –'};
   cd.append(E('div',{class:'row'},E('b',{},'TOTALE'),E('b',{},eur(T))),r,rs,E('div',{class:'ac'},
-    E('button',{class:'b g',onclick:()=>{cart={};render()}},'Svuota'),
+    E('button',{class:'b g',onclick:()=>{cart={};scheduleRender()}},'Svuota'),
     E('button',{class:'b g',onclick:()=>{
       const sortedClients = [...S.clienti.filter(x => x.tipo !== 'bet')].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
       const opts = [['NEW', 'CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
@@ -309,13 +323,11 @@ function vendita(m,s){
         log('Vendita Sospesa', cli.nome, `${eur(T)} - ${v.m || 'Sospeso'}`);
         cart = {};
         toast(`Segnati ${eur(T)} in sospeso a ${cli.nome}`);
-        render();
       });
     }},'A SOSPESO'),
     E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>String(x.id)==String(i));return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);const sObj={id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null};saveDoc('sales', sObj);log('Vendita','vendita '+vn(n),eur(T));cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
   ))}
  m.append(cd)}
-
 function tot(s){
  const v=S.sales.filter(x=>String(x.s)===String(s.id)),m=S.mov.filter(x=>String(x.s)===String(s.id)),
  rawSalesTotal=v.reduce((a,x)=>a+x.tot,0),
@@ -366,7 +378,7 @@ function form(t,fs,ok,lab='Conferma'){const els={};const b=E('div',{},fs.map(f=>
   return fl(f.l,i);
 }));
 modal(t,b,[['Annulla',null,'g'],[lab,()=>{const v={};for(const k in els)v[k]=els[k].value.trim();return ok(v)}]])}
-function toast(m){msg=m;render()}
+function toast(m){msg=m;scheduleRender()}
 
 function selectModuleScreen(){
   const d = E('div', {style:'max-width:480px;margin:5vh auto;padding:16px;text-align:center'});
@@ -375,7 +387,7 @@ function selectModuleScreen(){
     E('p', {class:'mu', style:'margin-bottom:24px'}, 'In quale sezione vuoi entrare?'),
     E('div', {
       class:'module-card',
-      onclick: () => { activeModule = 'bar'; tab = 'v'; render(); }
+      onclick: () => { activeModule = 'bar'; tab = 'v'; scheduleRender(); }
     },
       E('div', {style:'font-size:40px;margin-bottom:8px'}, '🍺'),
       E('b', {style:'font-size:20px;display:block'}, 'GESTIONE BAR'),
@@ -384,7 +396,7 @@ function selectModuleScreen(){
     E('div', {
       class:'module-card',
       style:'border-color:var(--ac)',
-      onclick: () => { activeModule = 'bet'; tab = 'k_clienti'; render(); }
+      onclick: () => { activeModule = 'bet'; tab = 'k_clienti'; scheduleRender(); }
     },
       E('div', {style:'font-size:40px;margin-bottom:8px'}, '🎰'),
       E('b', {style:'font-size:20px;display:block;color:var(--ac)'}, 'GESTIONE REGISTRO SCOMMESSE'),
@@ -424,7 +436,7 @@ function render(){
      isBarModule ? '🍺 Bar' : '🎰 Registro Scommesse',
      E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno Bar Aperto':'Turno Bar Chiuso'}`)
    ),
-   isBetUser()?E('button',{class:'b g s',onclick:()=>{activeModule=null;render()}},'🔀 Sezione'):null,
+   isBetUser()?E('button',{class:'b g s',onclick:()=>{activeModule=null;scheduleRender()}},'🔀 Sezione'):null,
    isDavide()?E('button',{class:isTestMode?'b r s':'b g s',style:isTestMode?'background:#d9381e;color:#fff':'border-color:#b4471f;color:#b4471f;font-weight:bold',onclick:toggleTestMode},isTestMode?'← Dati Reali':'🧪 Test Mode'):null,
    E('button',{class:'b g s',onclick:cambioPin},'PIN'),
    E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')
@@ -451,14 +463,14 @@ function render(){
      ['c','Clienti'],
      can('storico')&&['s','Storico'],
      can('catalogo')&&['a','Gestione']
-   ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))));
+   ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;scheduleRender()}},l))));
  } else {
    (views[tab] || betClientiView)(m);
    a.append(E('nav',{},[
      ['k_clienti','👥 Clienti'],
      ['k_turno','🎰 Turno'],
      ['k_storico','📊 Storico']
-   ].map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;render()}},l))));
+   ].map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;scheduleRender()}},l))));
  }
 
  if (activeId) {
@@ -475,11 +487,11 @@ function render(){
 
 function login(){
   const d=E('div',{class:'pin'},E('h2',{},'🍺 Gestione Bar & Scommesse'));
-  if(needSetup){const n=E('input',{placeholder:'Il tuo nome'}),p=E('input',{type:'password',inputmode:'numeric',placeholder:'PIN 4–6 cifre',maxlength:6,style:'margin-top:8px'});d.append(E('p',{class:'mu'},'Prima configurazione: crea il Proprietario.'),n,p,E('div',{class:'neg',style:'min-height:22px'},msg),E('button',{class:'b',onclick:()=>/^\d{4,6}$/.test(p.value)&&n.value.trim()?setup(n.value.trim(),p.value):(msg='Nome e PIN 4–6 cifre',render())},'Crea e inizia'));msg='';return d}
-  if(!sel){d.append(E('div',{class:'mu'},'Chi sei?'),...S.users.filter(u=>u.att).map(u=>E('button',{class:'b g',style:'display:block;width:100%;margin:8px 0',onclick:()=>{sel=u;pin='';render()}},u.nome)),E('div',{class:'neg'},msg));msg='';return d}
+  if(needSetup){const n=E('input',{placeholder:'Il tuo nome'}),p=E('input',{type:'password',inputmode:'numeric',placeholder:'PIN 4–6 cifre',maxlength:6,style:'margin-top:8px'});d.append(E('p',{class:'mu'},'Prima configurazione: crea il Proprietario.'),n,p,E('div',{class:'neg',style:'min-height:22px'},msg),E('button',{class:'b',onclick:()=>/^\d{4,6}$/.test(p.value)&&n.value.trim()?setup(n.value.trim(),p.value):(msg='Nome e PIN 4–6 cifre',scheduleRender())},'Crea e inizia'));msg='';return d}
+  if(!sel){d.append(E('div',{class:'mu'},'Chi sei?'),...S.users.filter(u=>u.att).map(u=>E('button',{class:'b g',style:'display:block;width:100%;margin:8px 0',onclick:()=>{sel=u;pin='';scheduleRender()}},u.nome)),E('div',{class:'neg'},msg));msg='';return d}
   d.append(E('b',{},sel.nome),E('div',{class:'dots'},'●'.repeat(pin.length) || '·'),E('div',{class:'neg',style:'min-height:22px'},msg));msg='';
-  const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return render()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';render()});return}else if(pin.length<6)pin+=k;render()}},k)));
-  d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';render()}},'← Cambia utente'));return d
+  const p=E('div',{class:'pad'});[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].forEach(k=>p.append(E('button',{onclick:()=>{if(k==='⌫')pin=pin.slice(0,-1);else if(k==='OK'){if(pin.length<4){msg='PIN di 4–6 cifre';return scheduleRender()}signInWithEmailAndPassword(auth,sel.email,pw(pin)).catch(e=>{msg=e.code==='auth/too-many-requests'?'Troppi tentativi, riprova tra poco':'PIN errato';pin='';scheduleRender()});return}else if(pin.length<6)pin+=k;scheduleRender()}},k)));
+  d.append(p,E('button',{class:'b g s',onclick:()=>{sel=null;pin='';scheduleRender()}},'← Cambia utente'));return d
 }
 function apri(){form('Apri turno',[{l:'Fondo cassa iniziale (€)',k:'f',m:'decimal',v:'100,00'}],v=>{const f=par(v.f);if(f<0)return false;const s={id:nid('t'),da:me.id,dan:me.nome,ap:Date.now(),fondo:f,ch:null};saveDoc('ses', s);log('Apertura turno','turno '+tn(s.id),'Fondo '+eur(f));toast('Turno aperto con fondo '+eur(f))})}
 
@@ -498,7 +510,6 @@ function turno(m,s){
  ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CASSETTO'),E('b',{style:'font-size:26px'},eur(t.teo)))));
  if(can('chiudi'))m.append(E('div',{class:'f',style:'margin-top:10px'},E('button',{class:'b g',onclick:()=>mov('entrata')},'+ Entrata'),E('button',{class:'b g',onclick:()=>mov('uscita')},'− Uscita'),E('button',{class:'b g',onclick:fondoMod},'Modifica fondo'),E('button',{class:'b r',onclick:chiudi},'Chiudi cassa')));
  m.append(E('h3',{},'Operazioni del turno'),ops(s.id,{}))}
-
 async function modificaMovimentoCliente(c, st) {
  if (st.sId) await loadSes(st.sId);
  const defaultVal = (st.imp / 100).toFixed(2).replace('.', ',');
@@ -543,7 +554,6 @@ async function modificaMovimentoCliente(c, st) {
   saveDoc('clienti', c);
   log('Modifica movimento cliente', c.nome, `${st.tipo}: da ${eur(oldImp)} a ${eur(newImp)}`);
   toast('Movimento aggiornato nel cliente e nel turno');
-  render();
  });
 }
 
@@ -564,7 +574,7 @@ function clienti(m,s){
     form('Nuovo Cliente Bar',[{l:'Nome e Cognome',k:'n'},{l:'Telefono (opzionale)',k:'t'}],v=>{
      if(!v.n){alert('Nome obbligatorio');return false}
      const c={id:nid('cli'),nome:v.n,tel:v.t||'',sospeso:0,storico:[],tipo:'bar'};
-     saveDoc('clienti', c);log('Nuovo cliente','cliente',v.n);toast('Cliente creato');render();
+     saveDoc('clienti', c);log('Nuovo cliente','cliente',v.n);toast('Cliente creato');
     })
    }},'+ Nuovo Cliente')
   ),
@@ -641,7 +651,7 @@ function clienti(m,s){
         nota: v.m.trim()
       });
       saveDoc('clienti', c);
-      log('Aggiunto debito',c.nome,`${eur(imp)} - ${v.m.trim()}`);toast('Debito registrato');render();
+      log('Aggiunto debito',c.nome,`${eur(imp)} - ${v.m.trim()}`);toast('Debito registrato');
      })
     }},'+ Debito'),
     E('button',{class:'b g s',onclick:()=>{
@@ -683,13 +693,13 @@ function clienti(m,s){
       };
       saveDoc('mov', mObj);
       saveDoc('clienti', c);
-      log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);toast('Pagamento e incasso in cassa registrati');render();
+      log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);toast('Pagamento e incasso in cassa registrati');
      })
     }},'− Salda'),
     sosp===0?E('button',{class:'b g s neg',style:'margin-left:auto',onclick:()=>{
      if(confirm(`Eliminare il cliente ${c.nome}?`)){
       removeDoc('clienti', c.id);
-      log('Cliente eliminato','cliente',c.nome);toast('Cliente eliminato');render();
+      log('Cliente eliminato','cliente',c.nome);toast('Cliente eliminato');
      }
     }},'Elimina'):null
    ),
@@ -697,7 +707,6 @@ function clienti(m,s){
   ))
  });
 }
-
 function totBet(s){
   if (!s) return { deb:0, acc:0, inc:0, pag:0, cassaIn:0, teo:0 };
   
@@ -917,10 +926,8 @@ function apriModalNuovoClienteBet(){
     saveDoc('clienti', c);
     log('Nuovo cliente scommesse', 'cliente', name);
     toast('Cliente scommesse creato');
-    render();
   });
 }
-
 function eliminaClienteBet(c){
   const st = getBetClientStats(c.nome);
   if (st.saldoNetto !== 0) {
@@ -931,7 +938,6 @@ function eliminaClienteBet(c){
   removeDoc('clienti', c.id);
   log('Eliminato cliente scommesse', 'cliente_bet', c.nome);
   toast('Cliente eliminato');
-  render();
 }
 
 async function eliminaTuttiClientiBet(){
@@ -942,7 +948,6 @@ async function eliminaTuttiClientiBet(){
   }
   log('Eliminati tutti i clienti scommesse', 'clienti_bet', 'Tutti i clienti scommesse eliminati');
   toast('Tutti i clienti scommesse sono stati eliminati');
-  render();
 }
 
 function modificaNomeClienteBet(c){
@@ -969,7 +974,6 @@ function modificaNomeClienteBet(c){
 
     log('Modifica nome cliente scommesse', oldName, `Nuovo nome: ${newName}`);
     toast('Nome cliente aggiornato');
-    render();
   });
 }
 
@@ -990,7 +994,6 @@ function modificaMovimentoBetModal(m){
     saveDoc('bet_mov', m);
     log('Modifica movimento scommesse', m.cliente || 'cassa', `Da ${eur(oldImp)} a ${eur(newImp)} – ${v.m.trim()}`);
     toast('Movimento scommesse aggiornato');
-    render();
   });
 }
 
@@ -999,7 +1002,6 @@ async function eliminaMovimentoBet(m){
   removeDoc('bet_mov', m.id);
   log('Storno/Eliminazione movimento scommesse', m.cliente || 'cassa', `${eur(m.imp)} – ${m.causale || ''}`);
   toast('Operazione stornata / eliminata');
-  render();
 }
 
 function movBet(tipo){
@@ -1032,7 +1034,6 @@ function movBet(tipo){
     saveDoc('bet_mov', mObj);
     log('Movimento scommesse ' + tipo, 'cassa_bet', `${eur(i)} – ${v.m.trim()}`);
     toast(`Movimento di ${tipo} scommesse registrato`);
-    render();
   });
 }
 
@@ -1044,7 +1045,6 @@ function apriBet(){
     saveDoc('bet_ses', s);
     log('Apertura turno', 'turno ' + tnBet(s.id), 'Fondo ' + eur(f));
     toast('Turno aperto con fondo ' + eur(f));
-    render();
   });
 }
 
@@ -1076,11 +1076,9 @@ function chiudiBet(){
       saveDoc('bet_ses', s);
       log('Chiusura turno', 'turno ' + tnBet(s.id), `Teorico ${eur(t.teo)}, contato ${eur(re)}, diff ${eur(re - t.teo)}`);
       toast('Turno chiuso. Differenza: ' + eur(s.diff));
-      render();
     }, 'r']
   ]);
 }
-
 async function deleteBetSes(shiftId){
   if(!confirm(`Sei sicuro di voler eliminare il Turno #${tnBet(shiftId)} e tutti i suoi movimenti?`)) return;
   removeDoc('bet_ses', shiftId);
@@ -1090,7 +1088,6 @@ async function deleteBetSes(shiftId){
 
   log('Eliminato turno scommesse', 'turno_bet #' + tnBet(shiftId), `Turno ID ${shiftId}`);
   toast('Turno scommesse eliminato');
-  render();
 }
 
 async function deleteAllBetSes(){
@@ -1103,7 +1100,6 @@ async function deleteAllBetSes(){
 
   log('Eliminati tutti i turni scommesse', 'turni_bet', 'Tutti i turni scommesse cancellati');
   toast('Tutti i turni scommesse sono stati eliminati');
-  render();
 }
 
 function mostraOperazioniTurnoBet(s){
@@ -1142,7 +1138,7 @@ function betClientiView(m){
     style: 'margin-bottom:10px;font-weight:bold;border-color:var(--ac);',
     onchange: (e) => {
       F.hideBetClients = (e.target.value === 'hide');
-      render();
+      scheduleRender();
     }
   },
     E('option', {value:'show', ...(F.hideBetClients ? {} : {selected:''})}, '👁️ Mostra Lista Clienti & Saldi Individuali'),
@@ -1263,7 +1259,6 @@ function betClientiView(m){
     renderClients();
   }
 }
-
 function betTurnoView(m){
   const s = curBet();
   const shiftStats = getBetStatsShift(s);
@@ -1368,9 +1363,9 @@ function betStoricoView(m){
           E('div', {class:'sm'}, `Fondo ${eur(shift.fondo)} · Cassetto Teorico ${eur(shift.teo)} · Contato ${eur(shift.reale)}`),
           shift.diff != null ? E('b', {class: shift.diff < 0 ? 'neg' : shift.diff > 0 ? 'pos' : '', style:'display:block;margin-top:2px'}, 'Differenza cassa: ' + eur(shift.diff)) : null,
           E('div', {class:'sm mu', style:'margin-top:2px'}, `Aperto da ${shift.dan} · chiuso da ${shift.chn || '–'} il ${dt(shift.ch)}${shift.nota ? ' · Nota: ' + shift.nota : ''}`),
-          E('div', {class:'f', style:'margin-top:8px'},
+          E('div', {style:'margin-top:8px'},
             E('button', {class:'b g s', onclick: () => mostraOperazioniTurnoBet(shift)}, '📊 Report & Operazioni'),
-            E('button', {class:'b r s', onclick: () => deleteBetSes(shift.id)}, '🗑️ Elimina')
+            E('button', {class:'b r s', style:'margin-left:8px', onclick: () => deleteBetSes(shift.id)}, '🗑️ Elimina')
           )
         )
       );
@@ -1427,7 +1422,6 @@ function opsScommesse(shiftId = null){
   });
   return container;
 }
-
 function apriModalScommessa(tipoOp, preselectedClientId=null) {
   const activeShift = curBet();
   if(!activeShift){
@@ -1531,7 +1525,6 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
       saveDoc('bet_mov', mObj);
       log('Scommessa ' + tipoOp, cliName, `${eur(imp)} – ${causaleFinale}`);
       toast('Operazione scommesse registrata');
-      render();
     }]
   ]);
 }
@@ -1557,7 +1550,6 @@ function fondoMod(){const s=cur();form('Modifica fondo cassa',[{l:'Nuovo fondo (
 
 function chiudi(){const s=cur(),t=tot(s),r=E('input',{inputmode:'decimal',placeholder:'0,00'}),n=E('input',{placeholder:'Nota (facoltativa)'}),d=E('b',{});r.oninput=()=>{const x=par(r.value)-t.teo;d.className=x<0?'neg':x>0?'pos':'';d.textContent='Differenza: '+eur(x)};d.textContent='Differenza: –';
  modal('Chiusura cassa',E('div',{},E('div',{class:'row'},'Contante teorico',E('b',{},eur(t.teo))),fl('Contante réellement contato (€)',r),E('div',{style:'margin:8px 0'},d),fl('Nota',n)),[['Annulla',null,'g'],['Chiudi e azzera',()=>{if(!r.value){alert('Inserisci il contante contato');return false}const re=par(r.value);Object.assign(s,{ch:Date.now(),chn:me.nome,chiusa:me.id,reale:re,teo:t.teo,diff:re-t.teo,nota:n.value.trim()});saveDoc('ses', s);log('Chiusura turno','turno '+tn(s.id),`Teorico ${eur(t.teo)}, contato ${eur(re)}, differenza ${eur(re-t.teo)}`);toast('Turno chiuso. Differenza: '+eur(s.diff))},'r']])}
-
 function csv(rows){return'\ufeff'+rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(';')).join('\n')}
 
 async function dl(name,data){try{const d=await window.claude?.use('downloads');if(d){await d.save({filename:name,data});return}}catch(e){if(e?.code==='declined')return}modal('Esporta CSV (copia il testo)',E('textarea',{rows:10},data),[['Chiudi',null,'g']])}
@@ -1573,7 +1565,6 @@ async function deleteSes(shiftId){
 
  log('Eliminato turno', 'turno #' + tn(shiftId), `Turno ID ${shiftId}`);
  toast('Turno eliminato');
- render();
 }
 
 async function deleteAllSes(){
@@ -1588,7 +1579,6 @@ async function deleteAllSes(){
 
  log('Eliminati tutti i turni', 'turni', 'Tutti i turni cancellati');
  toast('Tutti i turni sono stati eliminati');
- render();
 }
 
 async function mostraOperazioniTurno(s){
@@ -1604,7 +1594,7 @@ async function mostraOperazioniTurno(s){
       E('div', {}, E('small', {}, 'Debiti Saldati / Incassati'), E('b', {class:'pos'}, eur(t.incDeb))),
       E('div', {}, E('small', {}, 'Entrate Manuali'), E('b', {}, eur(t.en))),
       E('div', {}, E('small', {}, 'Uscite Manuali'), E('b', {class:'neg'}, eur(-t.us))),
-      E('div', {class:'w'}, E('small', {}, 'CONTANTE TEORICO IN CASSA'), E('b', {style:'font-size:22px'}, eur(t.teo)))
+      E('div', {class:'w'}, E('small', {}, 'CONTANTE TEORICO CASSA'), E('b', {style:'font-size:22px'}, eur(t.teo)))
     )
   );
   const opsContainer = E('div', {style:'max-height:60vh;overflow-y:auto;padding-right:4px'}, rep, ops(s.id, {ro:1}));
@@ -1612,7 +1602,7 @@ async function mostraOperazioniTurno(s){
 }
 
 function storico(m){
- const sel=(k,l,o)=>E('select',{onchange:e=>{F[k]=e.target.value;render()}},E('option',{value:''},l),o.map(([v,n])=>E('option',{value:v,...(String(F[k])===String(v)?{selected:''}:{})},n)));
+ const sel=(k,l,o)=>E('select',{onchange:e=>{F[k]=e.target.value;scheduleRender()}},E('option',{value:''},l),o.map(([v,n])=>E('option',{value:v,...(String(F[k])===String(v)?{selected:''}:{})},n)));
  m.append(
   E('div',{class:'f',style:'align-items:center;justify-content:space-between;margin-bottom:8px'},
    E('h3',{style:'margin:0'},'Turni Bar'),
@@ -1636,7 +1626,7 @@ function storico(m){
    )
   }),
   E('h3',{},'Operazioni Bar'),
-  E('div',{class:'f'},sel('s','Turno…',S.ses.map(s=>[s.id,'Turno '+tn(s.id)])),sel('o','Operatore…',S.users.map(u=>[u.id,u.nome])),sel('t','Tipo…',['vendita','storno','entrata','uscita'].map(x=>[x,x])),E('input',{id:'prod-search-input',placeholder:'Prodotto…',v:F.p,onchange:e=>{F.p=e.target.value;render()}}),E('input',{type:'date',v:F.d,onchange:e=>{F.d=e.target.value;render()}}),E('button',{class:'b g s',onclick:()=>{F={s:'',o:'',t:'',p:'',d:''};render()}},'Azzera filtri'))
+  E('div',{class:'f'},sel('s','Turno…',S.ses.map(s=>[s.id,'Turno '+tn(s.id)])),sel('o','Operatore…',S.users.map(u=>[u.id,u.nome])),sel('t','Tipo…',['vendita','storno','entrata','uscita'].map(x=>[x,x])),E('input',{id:'prod-search-input',placeholder:'Prodotto…',v:F.p,onchange:e=>{F.p=e.target.value;scheduleRender()}}),E('input',{type:'date',v:F.d,onchange:e=>{F.d=e.target.value;scheduleRender()}}),E('button',{class:'b g s',onclick:()=>{F={s:'',o:'',t:'',p:'',d:''};scheduleRender()}},'Azzera filtri'))
  );
  if(!F.s&&S.ses.length)F.s=S.ses[S.ses.length-1].id;const ss=F.s?[+F.s]:[];loadSes(+F.s);ss.forEach(id=>m.append(E('div',{class:'mu sm'},'Turno '+tn(id)),ops(id,{...F,ro:1})));
  const ex=[['Turno','Tipo','Id','Data','Operatore','Importo €','Motivo','Dettaglio']];S.ses.forEach(s=>{S.sales.filter(x=>String(x.s)===String(s.id)).forEach(x=>ex.push([tn(s.id),'vendita',vn(x.id),dt(x.t),x.opn,x.tot/100,'',x.items.map(i=>i.q+'x '+i.n).join(', ')]));S.mov.filter(x=>String(x.s)===String(s.id)).forEach(x=>ex.push([tn(s.id),x.tipo,vn(x.id),dt(x.t),x.opn,x.imp/100,x.motivo,(x.items||[]).map(i=>i.q+'x '+i.n).join(', ')||'rif. '+vn(x.rif)]))});
@@ -1644,11 +1634,11 @@ function storico(m){
  m.append(E('h3',{},'Registro attività'),...[...S.audit].reverse().slice(0,150).filter(a=>!F.o||String(a.u)===String(F.o)).map(a=>E('div',{class:'row sm'},E('span',{},E('b',{},a.az),' · '+a.ent+' · '+a.det),E('span',{class:'mu'},a.n+' · '+dt(a.t)))))}
 
 function admin(m){
- m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;const cObj={id:nid('c'),nome:v.n,att:1};saveDoc('cats', cObj);log('Nuova categoria','categoria',v.n);render()})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:[...S.cats].sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;const pObj={id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1};saveDoc('prods', pObj);log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`);render()})},'+ Prodotto')));
+ m.append(E('h3',{},'Catalogo'),E('div',{class:'f'},E('button',{class:'b g',onclick:()=>form('Nuova categoria',[{l:'Nome',k:'n'}],v=>{if(!v.n)return false;const cObj={id:nid('c'),nome:v.n,att:1};saveDoc('cats', cObj);log('Nuova categoria','categoria',v.n)})},'+ Categoria'),E('button',{class:'b g',onclick:()=>form('Nuovo prodotto',[{l:'Categoria',k:'c',o:[...S.cats].sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).map(c=>[c.id,c.nome]),v:cat},{l:'Nome',k:'n'},{l:'Prezzo (€)',k:'p',m:'decimal'}],v=>{if(!v.n||par(v.p)<=0)return false;const pObj={id:nid('p'),c:+v.c,nome:v.n,p:par(v.p),att:1};saveDoc('prods', pObj);log('Nuovo prodotto','prodotto',`${v.n} ${eur(par(v.p))}`)})},'+ Prodotto')));
  S.cats.sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'})).forEach(c=>{
   const catProds=S.prods.filter(p=>String(p.c)===String(c.id)).sort((a,b)=>a.nome.localeCompare(b.nome,'it',{sensitivity:'base'}));
   const d=E('div',{class:'cd'},E('b',{},c.nome+(c.att?'':' (disattiva)')));
-  d.append(E('div',{class:'f'},E('button',{class:'b g s',onclick:()=>{c.att=c.att?0:1;saveDoc('cats', c);log(c.att?'Categoria riattivata':'Categoria disattivata','categoria',c.nome);render()}},c.att?'Disattiva categoria':'Riattiva categoria')));
+  d.append(E('div',{class:'f'},E('button',{class:'b g s',onclick:()=>{c.att=c.att?0:1;saveDoc('cats', c);log(c.att?'Categoria riattivata':'Categoria disattivata','categoria',c.nome)}},c.att?'Disattiva categoria':'Riattiva categoria')));
   catProds.forEach(p=>{
    d.append(E('div',{class:'row'},
     E('span',{},p.nome+' · '+eur(p.p)+(p.att?'':' (disattivo)')),
@@ -1656,11 +1646,11 @@ function admin(m){
      E('button',{class:'b g s',onclick:()=>{
       form('Modifica prodotto',[{l:'Nome',k:'n',v:p.nome},{l:'Prezzo (€)',k:'p',m:'decimal',v:(p.p/100).toFixed(2).replace('.',',')}],v=>{
        if(!v.n||par(v.p)<=0)return false;
-       p.nome=v.n;p.p=par(v.p);saveDoc('prods', p);log('Modifica prodotto','prodotto',`${v.n} ${eur(p.p)}`);render();
+       p.nome=v.n;p.p=par(v.p);saveDoc('prods', p);log('Modifica prodotto','prodotto',`${v.n} ${eur(p.p)}`);
       })
      }},'Modifica'),
      ' ',
-     E('button',{class:'b g s',onclick:()=>{p.att=p.att?0:1;saveDoc('prods', p);log(p.att?'Prodotto riattivato':'Prodotto disattivato','prodotto',p.nome);render()}},p.att?'Disattiva':'Riattiva')
+     E('button',{class:'b g s',onclick:()=>{p.att=p.att?0:1;saveDoc('prods', p);log(p.att?'Prodotto riattivato':'Prodotto disattivato','prodotto',p.nome)}},p.att?'Disattiva':'Riattiva')
     )
    ))
   });
@@ -1677,7 +1667,7 @@ function admin(m){
    ...S.users.map(u=>E('div',{class:'cd'},
     E('div',{class:'row',style:'border:0'},
      E('b',{},u.nome+' ('+RN[u.ruolo]+')'+(u.att?'':' (disattivo)')),
-     u.id!==me.id?E('button',{class:'b g s',onclick:()=>{u.att=u.att?0:1;saveDoc('users', u);log(u.att?'Utente riattivato':'Utente disattivato','utente',u.nome);render()}},u.att?'Disattiva':'Riattiva'):null
+     u.id!==me.id?E('button',{class:'b g s',onclick:()=>{u.att=u.att?0:1;saveDoc('users', u);log(u.att?'Utente riattivato':'Utente disattivato','utente',u.nome)}},u.att?'Disattiva':'Riattiva'):null
     )
    ))
   )
