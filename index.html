@@ -1299,7 +1299,7 @@ function betTurnoView(m){
         E('div', {style:'background:#1e3a8a;color:#fff'},
           E('small', {}, '📊 TOTALE CERCHIO TURNO (PARTE DA 0 €)'),
           E('b', {style:'font-size:24px'}, eur(totaleCerchioTurno)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Incasso Cassetto (${eur(incassoCassettoNetto)}) + Debiti Turno (${eur(shiftStats.totDebiti)})`)
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Incasso Cassetto (${eur(incassoCassettoNetto)}) - Debiti Turno (${eur(shiftStats.totDebiti)})`)
         )
       )
     ),
