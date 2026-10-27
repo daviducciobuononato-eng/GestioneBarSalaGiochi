@@ -94,7 +94,8 @@ function saveDoc(colName, d){
   const C = getCOL();
   const cName = C[colName] || colName;
   const idStr = String(d.id);
-  return setDoc(doc(db, cName, idStr), JSON.parse(JSON.stringify(d))).catch(err);
+  // Usa { merge: true } per evitare che update o scritture sovrascrivano interamente i documenti
+  return setDoc(doc(db, cName, idStr), JSON.parse(JSON.stringify(d)), { merge: true }).catch(err);
 }
 
 function removeDoc(colName, id){
@@ -142,8 +143,8 @@ function start(){
   L('cats',collection(db, C.cats));
   L('prods',collection(db, C.prods));
   L('clienti',collection(db, C.clienti));
-  // Limita a 100 movimenti scommesse per non esaurire la quota di letture
-  L('bet_mov',query(collection(db, C.bet_mov),orderBy('t','desc'),limit(100)));
+  // Sincronizzazione completa dei movimenti per evitare azzeramento saldi oltre 100 operazioni
+  L('bet_mov',collection(db, C.bet_mov));
   L('bet_ses',collection(db, C.bet_ses));
   L('ses',collection(db, C.ses),()=>{
     const c=cur()?.id||null;
@@ -343,7 +344,7 @@ function tot(s){
  (S.clienti||[]).forEach(c => {
    (c.storico||[]).forEach(stItem => {
      if (stItem.tipo === 'debito_manuale' && (String(stItem.sNum) === String(tn(s.id)) || String(stItem.sId) === String(s.id))) {
-       debMan += stItem.imp;
+        debMan += stItem.imp;
      }
    });
  });
@@ -1422,6 +1423,7 @@ function opsScommesse(shiftId = null){
   });
   return container;
 }
+
 function apriModalScommessa(tipoOp, preselectedClientId=null) {
   const activeShift = curBet();
   if(!activeShift){
