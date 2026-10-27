@@ -794,7 +794,8 @@ function getBetStatsShift(s){
     totDebiti: 0, debitiGiocate: 0, debitiRicariche: 0, debitiAltro: 0,
     totAccrediti: 0, accreditiVincite: 0, accreditiPrelievi: 0, 
     totRicariche: 0, totScommesseNetto: 0, scommesseGiocate: 0, scommesseVinte: 0, totPaga: 0,
-    entrateManuali: 0, incassiDebiti: 0, usciteManuali: 0, vincitePagate: 0
+    entrateManuali: 0, incassiDebiti: 0, usciteManuali: 0, vincitePagate: 0,
+    debitiDanilo: 0, incassiDanilo: 0
   };
   
   const movs = (S.bet_mov || []).filter(x => String(x.s) === String(s.id));
@@ -802,12 +803,19 @@ function getBetStatsShift(s){
   let totAccrediti = 0, accreditiVincite = 0, accreditiPrelievi = 0;
   let totRicariche = 0, scommesseGiocate = 0, scommesseVinte = 0, totPaga = 0;
   let entrateManuali = 0, incassiDebiti = 0, usciteManuali = 0, vincitePagate = 0;
+  let debitiDanilo = 0, incassiDanilo = 0;
   
   movs.forEach(m => {
     const c = (m.causale || '').toLowerCase();
     const isRicarica = c.includes('ricarica');
     const isBiglietto = c.includes('biglietto') || c.includes('giocata') || c.includes('scommessa');
     const isPrelievo = c.includes('prelievo') || c.includes('conto');
+
+    // Calcolo movimenti segnati da Danilo (fuori cassa)
+    if (m.daniloNoCassa) {
+      if (m.tipo === 'debito') debitiDanilo += m.imp;
+      else if (m.tipo === 'incasso_debito' || m.tipo === 'accredito' || m.tipo === 'paga') incassiDanilo += m.imp;
+    }
 
     if (m.tipo === 'debito') {
       totDebiti += m.imp;
@@ -873,7 +881,9 @@ function getBetStatsShift(s){
     entrateManuali,
     incassiDebiti,
     usciteManuali,
-    vincitePagate
+    vincitePagate,
+    debitiDanilo,
+    incassiDanilo
   };
 }
 
@@ -1276,8 +1286,9 @@ function betTurnoView(m){
   }
 
   const t = totBet(s);
-  const incassoCassettoNetto = t.cassaIn - t.pag;
-  const totaleCerchioTurno = incassoCassettoNetto - shiftStats.totDebiti;
+  // Incasso effettivo scommesse escludendo le entrate manuali
+  const incassoScommessePuro = shiftStats.incassiDebiti - shiftStats.vincitePagate;
+  const totaleCerchioTurno = incassoScommessePuro - shiftStats.totDebiti;
 
   m.append(
     E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
@@ -1294,12 +1305,12 @@ function betTurnoView(m){
         E('div', {style:'background:#2b7a4b;color:#fff'},
           E('small', {}, '💵 CASSETTO (CONTANTE IN CASSA)'),
           E('b', {style:'font-size:24px'}, eur(t.teo)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(incassoCassettoNetto)}`)
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(t.cassaIn - t.pag)}`)
         ),
         E('div', {style:'background:#1e3a8a;color:#fff'},
           E('small', {}, '📊 TOTALE CERCHIO TURNO (PARTE DA 0 €)'),
           E('b', {style:'font-size:24px'}, eur(totaleCerchioTurno)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Incasso Cassetto (${eur(incassoCassettoNetto)}) - Debiti Turno (${eur(shiftStats.totDebiti)})`)
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Incasso Scommesse (${eur(incassoScommessePuro)}) - Debiti Turno (${eur(shiftStats.totDebiti)})`)
         )
       )
     ),
@@ -1326,6 +1337,16 @@ function betTurnoView(m){
           E('small', {}, '📤 USCITE MANUALI / PAGAMENTI (− CASSA)'),
           E('b', {class:'neg', style:'font-size:18px;display:block;margin-top:2px'}, eur(t.pag)),
           E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Uscite manuali: ${eur(shiftStats.usciteManuali)} + Vincite pagate: ${eur(shiftStats.vincitePagate)})`)
+        ),
+        E('div', {style:'border-left:3px solid #e27a4c;padding-left:8px'},
+          E('small', {}, '👤 DEBITI SEGNATI DA DANILO'),
+          E('b', {class:'neg', style:'font-size:18px;display:block;margin-top:2px'}, eur(shiftStats.debitiDanilo)),
+          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, 'Non incidono sul cassetto contanti')
+        ),
+        E('div', {style:'border-left:3px solid #2b7a4b;padding-left:8px'},
+          E('small', {}, '👤 SALDI / INCASSI DANILO'),
+          E('b', {class:'pos', style:'font-size:18px;display:block;margin-top:2px'}, eur(shiftStats.incassiDanilo)),
+          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, 'Non incidono sul cassetto contanti')
         )
       )
     ),
@@ -1340,7 +1361,7 @@ function betTurnoView(m){
     opsScommesse(s.id)
   );
 }
-
+  
 function betStoricoView(m){
   const closedShifts = (S.bet_ses || []).filter(x => x.ch);
   m.append(
