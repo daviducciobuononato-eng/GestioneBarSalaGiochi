@@ -754,7 +754,6 @@ function totBet(s){
       clientBal[cli] = curBal + imp;
     } else if (t === 'accredito') {
       clientBal[cli] = curBal - imp;
-      // Se l'accredito è una Ricarica Conto Gioco, il contante entra nel cassetto!
       if (isThisShift && !danilo && isRicarica) {
         cassaIn += imp;
       }
@@ -773,7 +772,8 @@ function totBet(s){
         cassaIn += cashEntered;
       }
     } else if (t === 'paga') {
-      clientBal[cli] = curBal - imp;
+      // CORREZIONE: Paga scala il credito del cliente (sposta il saldo verso il positivo)
+      clientBal[cli] = curBal + imp;
       if (isThisShift && !danilo) {
         pag += imp;
       }
@@ -919,13 +919,11 @@ function getBetClientStats(clientName){
       }
     } else if (m.tipo === 'paga') {
       pag += imp;
-      if (activeShift && String(m.s) === String(activeShift.id)) {
-        currAcc += imp;
-      }
     }
   });
 
-  const saldoNetto = deb - (acc + inc + pag);
+  // CORREZIONE: 'pag' (soldi dati in contanti al cliente) riduce il credito accumulato
+  const saldoNetto = (deb + pag) - (acc + inc);
   const debitoResiduo = Math.max(0, saldoNetto);
   
   return { saldoNetto, debitoResiduo, totAccrediti: currAcc };
