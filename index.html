@@ -730,11 +730,16 @@ function totBet(s){
       else if (t === 'incasso_debito') inc += imp;
     }
 
+    // Se l'operazione è contrassegnata come diretta al banco/cassetto (saldo cliente invariato)
     if (pagatoBanco) {
       if (isThisShift && !danilo) {
-        cassaIn += imp;
+        if (t === 'paga' || t === 'uscita') {
+          pag += imp; // Scala dal cassetto contanti
+        } else {
+          cassaIn += imp; // Entra nel cassetto contanti
+        }
       }
-      return;
+      return; // Ritorna subito lasciando invariato il saldo del cliente
     }
 
     if (!cli || cli === 'cassa') {
@@ -772,7 +777,6 @@ function totBet(s){
         cassaIn += cashEntered;
       }
     } else if (t === 'paga') {
-      // CORREZIONE: Paga scala il credito del cliente (sposta il saldo verso il positivo)
       clientBal[cli] = curBal + imp;
       if (isThisShift && !danilo) {
         pag += imp;
@@ -1535,6 +1539,10 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
                      tipoOp === 'paga' ? 'Pagato da Danilo (non incide nel cassetto contanti)' :
                      'Incassato da Danilo (non incide nel cassetto contanti)';
 
+  const labelPagatoBanco = tipoOp === 'paga'
+    ? '💵 PAGA DAL CASSETTO (CLIENTE RIMANE INVARIATO)'
+    : '💵 PAGATO SUBITO IN CONTANTI AL BANCO (entra in cassa, saldo cliente invariato)';
+
   const bodyModal = E('div', {},
     fl('Seleziona Cliente Scommesse', selectClient),
     fl('Nuovo Cliente (se selezionato CREA NUOVO)', inputNewClient),
@@ -1547,7 +1555,7 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
     ),
     E('div', {style:'margin-top:8px;display:flex;align-items:center'},
       checkPagatoBanco,
-      E('label', {style:'font-weight:bold;font-size:14px;color:var(--ok)'}, '💵 PAGATO SUBITO IN CONTANTI AL BANCO (entra in cassa, saldo cliente invariato)')
+      E('label', {style:'font-weight:bold;font-size:14px;color:var(--ok)'}, labelPagatoBanco)
     )
   );
 
