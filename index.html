@@ -811,7 +811,11 @@ function getBetStatsShift(s){
     const isBiglietto = c.includes('biglietto') || c.includes('giocata') || c.includes('scommessa');
     const isPrelievo = c.includes('prelievo') || c.includes('conto');
 
-    // Calcolo movimenti segnati da Danilo (fuori cassa)
+    // Somma di tutte le ricariche e giocate del turno
+    if (isRicarica) totRicariche += m.imp;
+    if (isBiglietto) scommesseGiocate += m.imp;
+
+    // Movimenti segnati da Danilo (fuori cassa)
     if (m.daniloNoCassa) {
       if (m.tipo === 'debito') debitiDanilo += m.imp;
       else if (m.tipo === 'incasso_debito' || m.tipo === 'accredito' || m.tipo === 'paga') incassiDanilo += m.imp;
@@ -821,10 +825,8 @@ function getBetStatsShift(s){
       totDebiti += m.imp;
       if (isRicarica) {
         debitiRicariche += m.imp;
-        totRicariche += m.imp;
       } else if (isBiglietto) {
         debitiGiocate += m.imp;
-        scommesseGiocate += m.imp;
       } else {
         debitiAltro += m.imp;
       }
@@ -1286,9 +1288,14 @@ function betTurnoView(m){
   }
 
   const t = totBet(s);
-  // Incasso effettivo scommesse escludendo le entrate manuali
-  const incassoScommessePuro = shiftStats.incassiDebiti - shiftStats.vincitePagate;
-  const totaleCerchioTurno = incassoScommessePuro - shiftStats.totDebiti;
+
+  // 1. Calcolo REGISTRO TURNO (Tutte le entrate/incassi meno tutti i debiti/vincite/uscite)
+  const totaleEntrateIncassi = t.cassaIn;
+  const totaleDebitiAccreditiUscite = shiftStats.totDebiti + shiftStats.totAccrediti + shiftStats.usciteManuali;
+  const totaleRegistro = totaleEntrateIncassi - totaleDebitiAccreditiUscite;
+
+  // 2. Calcolo SOMMA RICARICHE + GIOCATE
+  const sommaRicaricheGiocate = shiftStats.totRicariche + shiftStats.scommesseGiocate;
 
   m.append(
     E('div', {class:'cd', style:'background:var(--cd);border:1px solid var(--ac);margin-bottom:12px'},
@@ -1300,17 +1307,25 @@ function betTurnoView(m){
     ),
 
     E('div', {style:'margin-bottom:16px'},
-      E('small', {class:'mu', style:'font-weight:bold;letter-spacing:0.5px;display:block;margin-bottom:6px'}, '1. CASSA & VOLUME DEL TURNO'),
-      E('div', {class:'k'},
+      E('small', {class:'mu', style:'font-weight:bold;letter-spacing:0.5px;display:block;margin-bottom:6px'}, '1. CASSA & REGISTRO TURNO'),
+      E('div', {class:'k', style:'grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px'},
+        // CASSETTO
         E('div', {style:'background:#2b7a4b;color:#fff'},
           E('small', {}, '💵 CASSETTO (CONTANTE IN CASSA)'),
           E('b', {style:'font-size:24px'}, eur(t.teo)),
           E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(t.cassaIn - t.pag)}`)
         ),
+        // REGISTRO (Tutte le operazioni)
         E('div', {style:'background:#1e3a8a;color:#fff'},
-          E('small', {}, '📊 TOTALE CERCHIO TURNO (PARTE DA 0 €)'),
-          E('b', {style:'font-size:24px'}, eur(totaleCerchioTurno)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Incasso Scommesse (${eur(incassoScommessePuro)}) - Debiti Turno (${eur(shiftStats.totDebiti)})`)
+          E('small', {}, '📋 REGISTRO TURNO (TUTTE LE OPERAZIONI)'),
+          E('b', {style:'font-size:24px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Incassi/Entrate (${eur(totaleEntrateIncassi)}) - Debiti/Accrediti (${eur(totaleDebitiAccreditiUscite)})`)
+        ),
+        // SOMMA RICARICHE + GIOCATE
+        E('div', {style:'background:#4c1d95;color:#fff'},
+          E('small', {}, '📱 SOMMA RICARICHE + GIOCATE'),
+          E('b', {style:'font-size:24px'}, eur(sommaRicaricheGiocate)),
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Ricariche: ${eur(shiftStats.totRicariche)} + Giocate: ${eur(shiftStats.scommesseGiocate)}`)
         )
       )
     ),
