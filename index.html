@@ -834,6 +834,8 @@ function getBetStatsShift(s){
       totAccrediti += m.imp;
       if (isPrelievo) {
         accreditiPrelievi += m.imp;
+      } else if (isRicarica) {
+        // È una ricarica effettuata tramite accredito (conteggiata già in totRicariche)
       } else {
         accreditiVincite += m.imp;
         scommesseVinte += m.imp;
@@ -1289,10 +1291,10 @@ function betTurnoView(m){
 
   const t = totBet(s);
 
-  // 1. Calcolo REGISTRO TURNO (Tutte le entrate/incassi meno tutti i debiti/vincite/uscite)
+  // 1. Calcolo REGISTRO TURNO CON SEGNI INVERTITI (+ reali diventano - e - reali diventano +)
   const totaleEntrateIncassi = t.cassaIn;
   const totaleDebitiAccreditiUscite = shiftStats.totDebiti + shiftStats.totAccrediti + shiftStats.usciteManuali;
-  const totaleRegistro = totaleEntrateIncassi - totaleDebitiAccreditiUscite;
+  const totaleRegistroInvertito = totaleDebitiAccreditiUscite - totaleEntrateIncassi;
 
   // 2. Calcolo SOMMA RICARICHE + GIOCATE
   const sommaRicaricheGiocate = shiftStats.totRicariche + shiftStats.scommesseGiocate;
@@ -1315,11 +1317,11 @@ function betTurnoView(m){
           E('b', {style:'font-size:24px'}, eur(t.teo)),
           E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(t.cassaIn - t.pag)}`)
         ),
-        // REGISTRO (Tutte le operazioni)
+        // REGISTRO (Tutte le operazioni con segno invertito)
         E('div', {style:'background:#1e3a8a;color:#fff'},
-          E('small', {}, '📋 REGISTRO TURNO (TUTTE LE OPERAZIONI)'),
-          E('b', {style:'font-size:24px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Incassi/Entrate (${eur(totaleEntrateIncassi)}) - Debiti/Accrediti (${eur(totaleDebitiAccreditiUscite)})`)
+          E('small', {}, '📋 REGISTRO TURNO (INVERTITO)'),
+          E('b', {style:'font-size:24px'}, (totaleRegistroInvertito > 0 ? '+' : '') + eur(totaleRegistroInvertito)),
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Debiti/Accrediti (${eur(totaleDebitiAccreditiUscite)}) - Incassi/Entrate (${eur(totaleEntrateIncassi)})`)
         ),
         // SOMMA RICARICHE + GIOCATE
         E('div', {style:'background:#4c1d95;color:#fff'},
@@ -1470,12 +1472,14 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
   const betClients = S.clienti.filter(x => x.tipo === 'bet');
   const sortedClients = [...betClients].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
   const optsClients = [['NEW', 'CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
+  
   const causaliPreset = tipoOp === 'debito' ? [
     ['Biglietto', 'Biglietto'],
     ['Ricarica Conto Gioco', 'Ricarica Conto Gioco'],
     ['MANUALE', 'Altra causale manuale...']
   ] : [
     ['Vincita Scommessa', 'Vincita Scommessa'],
+    ['Ricarica Conto Gioco', 'Ricarica Conto Gioco'],
     ['Prelievo conto gioco', 'Prelievo conto gioco'],
     ['MANUALE', 'Altra causale manuale...']
   ];
