@@ -1297,7 +1297,9 @@ function betTurnoView(m){
 
   const t = totBet(s);
 
-  // CALCOLO REGISTRO TURNO (Rosse + / Verdi -)
+  // CALCOLO REGISTRO TURNO:
+  // Operazioni in ROSSO (Debiti, Uscite, Pagamenti) = Valore POSITIVO (+)
+  // Operazioni in VERDE = Si calcolano SOLO gli ACCREDITI (-)
   const movsShift = (S.bet_mov || []).filter(x => String(x.s) === String(s.id));
   let totaleRossi = 0;
   let totaleVerdi = 0;
@@ -1306,7 +1308,8 @@ function betTurnoView(m){
     const isRed = (x.tipo === 'debito' || x.tipo === 'paga' || x.tipo === 'uscita');
     if (isRed) {
       totaleRossi += x.imp;
-    } else {
+    } else if (x.tipo === 'accredito') {
+      // Vengono conteggiati SOLO gli accrediti (esclusi biglietti/giocate in cassa)
       totaleVerdi += x.imp;
     }
   });
@@ -1334,11 +1337,11 @@ function betTurnoView(m){
           E('b', {style:'font-size:24px'}, eur(t.teo)),
           E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(t.cassaIn - t.pag)}`)
         ),
-        // REGISTRO TURNO
+        // REGISTRO TURNO (Rossi + / Solo Accrediti -)
         E('div', {style:'background:#1e3a8a;color:#fff'},
           E('small', {}, '📋 REGISTRO TURNO (TUTTE LE OPERAZIONI)'),
           E('b', {style:'font-size:24px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Operazioni Rosse (${eur(totaleRossi)}) - Operazioni Verdi (${eur(totaleVerdi)})`)
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Operazioni Rosse (${eur(totaleRossi)}) - Accrediti (${eur(totaleVerdi)})`)
         ),
         // SOMMA RICARICHE + GIOCATE
         E('div', {style:'background:#4c1d95;color:#fff'},
