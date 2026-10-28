@@ -1066,6 +1066,22 @@ function apriBet(){
   });
 }
 
+function fondoModBet(){
+  const s = curBet();
+  if (!s) return;
+  form('Modifica fondo cassa scommesse', [
+    {l:'Nuovo fondo (€)', k:'f', m:'decimal', v:(s.fondo/100).toFixed(2).replace('.',',')},
+    {l:'Motivo (obbligatorio)', k:'m'}
+  ], v => {
+    const f = par(v.f);
+    if (f < 0 || !v.m) { alert('Inserisci un importo valido e la motivazione.'); return false; }
+    log('Cambio fondo scommesse', 'turno ' + tnBet(s.id), `${eur(s.fondo)} → ${eur(f)} – ${v.m}`);
+    s.fondo = f;
+    saveDoc('bet_ses', s);
+    toast('Fondo cassa scommesse aggiornato');
+  });
+}
+  
 function chiudiBet(){
   const s = curBet();
   if(!s) return;
@@ -1295,7 +1311,7 @@ function betTurnoView(m){
 
   const t = totBet(s);
 
-  // CALCOLO REGISTRO TURNO (RIPRISTINATO COMPLETAMENTE COME PRIMA):
+  // CALCOLO REGISTRO TURNO:
   // Operazioni ROSSE (Debiti, Uscite, Pagamenti) = (+)
   // TUTTE le Operazioni VERDI (Entrate, Incassi, Accrediti) = (-)
   const movsShift = (S.bet_mov || []).filter(x => String(x.s) === String(s.id));
@@ -1334,7 +1350,7 @@ function betTurnoView(m){
           E('b', {style:'font-size:24px'}, eur(t.teo)),
           E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(t.cassaIn - t.pag)}`)
         ),
-        // REGISTRO TURNO (Rosse + / Verdi -)
+        // REGISTRO TURNO
         E('div', {style:'background:#1e3a8a;color:#fff'},
           E('small', {}, '📋 REGISTRO TURNO (TUTTE LE OPERAZIONI)'),
           E('b', {style:'font-size:24px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
@@ -1388,6 +1404,7 @@ function betTurnoView(m){
     E('div', {class:'f', style:'margin-bottom:16px'},
       E('button', {class:'b g', onclick: () => movBet('entrata')}, '+ Entrata Manuale'),
       E('button', {class:'b g', onclick: () => movBet('uscita')}, '− Uscita Manuale'),
+      E('button', {class:'b g', onclick: fondoModBet}, 'Modifica Fondo'),
       E('button', {class:'b r', style:'margin-left:auto', onclick: chiudiBet}, 'Chiudi Cassa')
     ),
 
@@ -1395,7 +1412,7 @@ function betTurnoView(m){
     opsScommesse(s.id)
   );
 }
-  
+
 function betStoricoView(m){
   const closedShifts = (S.bet_ses || []).filter(x => x.ch);
   m.append(
