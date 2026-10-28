@@ -1297,9 +1297,7 @@ function betTurnoView(m){
 
   const t = totBet(s);
 
-  // CALCOLO REGISTRO TURNO:
-  // Operazioni in ROSSO (Debiti, Uscite, Pagamenti) = Valore POSITIVO (+)
-  // Operazioni in VERDE (Accrediti, Entrate, Incassi) = Valore NEGATIVO (-)
+  // CALCOLO REGISTRO TURNO (Rosse + / Verdi -)
   const movsShift = (S.bet_mov || []).filter(x => String(x.s) === String(s.id));
   let totaleRossi = 0;
   let totaleVerdi = 0;
@@ -1336,7 +1334,7 @@ function betTurnoView(m){
           E('b', {style:'font-size:24px'}, eur(t.teo)),
           E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(t.cassaIn - t.pag)}`)
         ),
-        // REGISTRO TURNO (Rossi + / Verdi -)
+        // REGISTRO TURNO
         E('div', {style:'background:#1e3a8a;color:#fff'},
           E('small', {}, '📋 REGISTRO TURNO (TUTTE LE OPERAZIONI)'),
           E('b', {style:'font-size:24px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
@@ -1362,7 +1360,7 @@ function betTurnoView(m){
         E('div', {},
           E('small', {}, '🎁 ACCREDITI / VINCITE TURNO'),
           E('b', {class:'pos', style:'font-size:20px;display:block;margin-top:2px'}, eur(shiftStats.totAccrediti)),
-          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Vincite scommesse: ${eur(shiftStats.accreditiVincite)} + Prelievi conto: ${eur(shiftStats.accreditiPrelievi)})`)
+          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Vincite scommesse: ${eur(shiftStats.accreditiVincite)} + Ricariche conto gioco: ${eur(shiftStats.accreditiPrelievi)})`)
         ),
         E('div', {style:'border-left:3px solid var(--ok);padding-left:8px'},
           E('small', {}, '📥 ENTRATE MANUALI / INCASSI (+ CASSA)'),
