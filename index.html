@@ -722,6 +722,7 @@ function totBet(s){
     const danilo = m.daniloNoCassa;
     const isThisShift = (String(m.s) === String(s.id));
     const pagatoBanco = m.pagatoContantiBanco;
+    const isRicarica = (m.causale || '').toLowerCase().includes('ricarica');
     
     if (isThisShift) {
       if (t === 'debito') deb += imp;
@@ -753,6 +754,10 @@ function totBet(s){
       clientBal[cli] = curBal + imp;
     } else if (t === 'accredito') {
       clientBal[cli] = curBal - imp;
+      // Se l'accredito è una Ricarica Conto Gioco, il contante entra nel cassetto!
+      if (isThisShift && !danilo && isRicarica) {
+        cassaIn += imp;
+      }
     } else if (t === 'incasso_debito') {
       let cashEntered = 0;
       if (curBal > 0) {
@@ -811,11 +816,9 @@ function getBetStatsShift(s){
     const isBiglietto = c.includes('biglietto') || c.includes('giocata') || c.includes('scommessa');
     const isPrelievo = c.includes('prelievo') || c.includes('conto');
 
-    // Somma di tutte le ricariche e giocate del turno
     if (isRicarica) totRicariche += m.imp;
     if (isBiglietto) scommesseGiocate += m.imp;
 
-    // Movimenti segnati da Danilo (fuori cassa)
     if (m.daniloNoCassa) {
       if (m.tipo === 'debito') debitiDanilo += m.imp;
       else if (m.tipo === 'incasso_debito' || m.tipo === 'accredito' || m.tipo === 'paga') incassiDanilo += m.imp;
@@ -835,7 +838,9 @@ function getBetStatsShift(s){
       if (isPrelievo) {
         accreditiPrelievi += m.imp;
       } else if (isRicarica) {
-        // È una ricarica effettuata tramite accredito (conteggiata già in totRicariche)
+        if (!m.daniloNoCassa) {
+          incassiDebiti += m.imp;
+        }
       } else {
         accreditiVincite += m.imp;
         scommesseVinte += m.imp;
@@ -1274,6 +1279,7 @@ function betClientiView(m){
     renderClients();
   }
 }
+  
 function betTurnoView(m){
   const s = curBet();
   const shiftStats = getBetStatsShift(s);
@@ -1291,12 +1297,13 @@ function betTurnoView(m){
 
   const t = totBet(s);
 
-  // 1. Calcolo REGISTRO TURNO CON SEGNI INVERTITI (+ reali diventano - e - reali diventano +)
+  // REGISTRO TURNO:
+  // Incassi ed Entrate in cassa (+), minus Debiti, Accrediti/Vincite e Uscite (-)
   const totaleEntrateIncassi = t.cassaIn;
   const totaleDebitiAccreditiUscite = shiftStats.totDebiti + shiftStats.totAccrediti + shiftStats.usciteManuali;
-  const totaleRegistroInvertito = totaleDebitiAccreditiUscite - totaleEntrateIncassi;
+  const totaleRegistro = totaleEntrateIncassi - totaleDebitiAccreditiUscite;
 
-  // 2. Calcolo SOMMA RICARICHE + GIOCATE
+  // SOMMA RICARICHE + GIOCATE
   const sommaRicaricheGiocate = shiftStats.totRicariche + shiftStats.scommesseGiocate;
 
   m.append(
@@ -1317,11 +1324,11 @@ function betTurnoView(m){
           E('b', {style:'font-size:24px'}, eur(t.teo)),
           E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(t.cassaIn - t.pag)}`)
         ),
-        // REGISTRO (Tutte le operazioni con segno invertito)
+        // REGISTRO TURNO
         E('div', {style:'background:#1e3a8a;color:#fff'},
-          E('small', {}, '📋 REGISTRO TURNO (INVERTITO)'),
-          E('b', {style:'font-size:24px'}, (totaleRegistroInvertito > 0 ? '+' : '') + eur(totaleRegistroInvertito)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Debiti/Accrediti (${eur(totaleDebitiAccreditiUscite)}) - Incassi/Entrate (${eur(totaleEntrateIncassi)})`)
+          E('small', {}, '📋 REGISTRO TURNO (TUTTE LE OPERAZIONI)'),
+          E('b', {style:'font-size:24px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9'}, `Incassi/Entrate (${eur(totaleEntrateIncassi)}) - Debiti/Accrediti (${eur(totaleDebitiAccreditiUscite)})`)
         ),
         // SOMMA RICARICHE + GIOCATE
         E('div', {style:'background:#4c1d95;color:#fff'},
