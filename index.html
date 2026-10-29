@@ -1187,8 +1187,8 @@ function betClientiView(m) {
     ),
 
     E('div', {class:'f', style:'margin-bottom:12px'},
-      E('button', {class:'b g sm', style:'flex:1;padding:8px;font-size:13px'}, '+ Nuovo Cliente Scommesse'),
-      E('button', {class:'b r sm', style:'flex:1;padding:8px;font-size:13px'}, onclick: () => {
+      E('button', {class:'b g sm', style:'flex:1;padding:8px;font-size:13px', onclick: () => apriModalScommessa('debito')}, '+ Nuovo Cliente Scommesse'),
+      E('button', {class:'b r sm', style:'flex:1;padding:8px;font-size:13px', onclick: () => {
         if(confirm('Attenzione: vuoi davvero eliminare tutti i clienti scommesse?')) {
           S.clienti = S.clienti.filter(x => x.tipo !== 'bet');
           saveDoc('clienti', S.clienti);
