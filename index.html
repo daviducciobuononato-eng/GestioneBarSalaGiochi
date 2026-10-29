@@ -1206,14 +1206,27 @@ function betClientiView(m) {
   }
 
   const containerList = E('div', {});
-  const selectFilter = E('select', {style:'width:100%;margin-bottom:12px;padding:8px'},
+  const selectFilter = E('select', {style:'width:100%;margin-bottom:8px;padding:8px'},
     [['ALL', '👁️ Mostra Lista Clienti & Saldi Individuali'], ...sorted.map(x => [x.id, x.nome])].map(([v,n]) => E('option', {value:v}, n))
   );
+
+  const inputSearch = E('input', {placeholder:'🔍 Cerca cliente per nome...', style:'width:100%;margin-bottom:12px;padding:8px'});
 
   const renderList = () => {
     containerList.innerHTML = '';
     const selId = selectFilter.value;
-    const listToRender = (selId === 'ALL') ? sorted : sorted.filter(x => String(x.id) === String(selId));
+    const query = inputSearch.value.trim().toLowerCase();
+
+    let listToRender = (selId === 'ALL') ? sorted : sorted.filter(x => String(x.id) === String(selId));
+
+    if (query) {
+      listToRender = listToRender.filter(x => x.nome.toLowerCase().includes(query));
+    }
+
+    if (listToRender.length === 0) {
+      containerList.append(E('p', {class:'mu', style:'padding:8px 0'}, 'Nessun cliente trovato.'));
+      return;
+    }
 
     listToRender.forEach(c => {
       const st = getBetClientStats(c.nome);
@@ -1315,7 +1328,9 @@ function betClientiView(m) {
   };
 
   selectFilter.onchange = renderList;
-  m.append(selectFilter, containerList);
+  inputSearch.oninput = renderList;
+
+  m.append(selectFilter, inputSearch, containerList);
   renderList();
 }
  
