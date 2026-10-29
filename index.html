@@ -1220,23 +1220,52 @@ function betClientiView(m) {
       const isDeb = st.saldoNetto > 0;
       const isCred = st.saldoNetto < 0;
 
-      const cliMovs = (S.bet_mov || []).filter(x => x.cliente && x.cliente.trim().toLowerCase() === c.nome.trim().toLowerCase()).sort((a,b) => b.t - a.t);
+      const cliMovs = (S.bet_mov || [])
+        .filter(x => x.cliente && x.cliente.trim().toLowerCase() === c.nome.trim().toLowerCase())
+        .sort((a,b) => b.t - a.t);
 
       const histList = E('div', {style:'margin-top:6px'});
       if (cliMovs.length === 0) {
         histList.append(E('div', {class:'mu sm', style:'padding:4px 0'}, 'Nessun movimento registrato.'));
       } else {
-        cliMovs.forEach(m => {
-          const isRed = (m.tipo === 'debito' || m.tipo === 'paga' || m.tipo === 'uscita');
-          histList.append(
-            E('div', {style:'padding:6px 0;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;font-size:12px'},
-              E('div', {},
-                E('b', {}, m.tipo.toUpperCase() + (m.causale ? ` · ${m.causale}` : '')),
-                E('div', {class:'mu', style:'font-size:11px'}, dt(m.t))
-              ),
-              E('b', {class: isRed ? 'neg' : 'pos'}, (isRed ? '-' : '+') + eur(m.imp))
+        cliMovs.forEach(mov => {
+          const isRed = (mov.tipo === 'debito' || mov.tipo === 'paga' || mov.tipo === 'uscita');
+          
+          const cardMov = E('div', {class:'cd', style:'margin-top:6px;background:var(--cd);padding:8px 12px;border:1px solid var(--bd)'},
+            E('div', {class:'row', style:'border:0;padding:0'},
+              E('b', {}, mov.tipo.toUpperCase() + (mov.cliente ? ' · ' + mov.cliente : '')),
+              E('b', {class: isRed ? 'neg' : 'pos', style:'font-size:16px'}, (isRed ? '' : '+ ') + eur(mov.imp))
+            ),
+            E('div', {class:'mu sm', style:'margin-top:2px;font-size:11px'}, `${dt(mov.t)} · Op: ${mov.opn || 'Admin'} · Turno: ${mov.sNum || tnBet(mov.s)}`),
+            E('div', {class:'sm', style:'margin-top:2px'}, `Causale: ${mov.causale || 'Nessuna'}`),
+            E('div', {class:'f', style:'margin-top:8px;gap:6px'},
+              E('button', {class:'b sm', style:'flex:1;background:#fff;border:1px solid var(--bd)', onclick: () => {
+                form('Modifica Movimento', [
+                  {l:'Importo (€)', k:'imp', m:'decimal', v:(mov.imp/100).toFixed(2).replace('.',',')},
+                  {l:'Causale / Note', k:'causale', v: mov.causale || ''}
+                ], v => {
+                  const newImp = par(v.imp);
+                  if (newImp <= 0) { alert('Importo non valido'); return false; }
+                  mov.imp = newImp;
+                  mov.causale = v.causale || '';
+                  saveDoc('bet_mov', S.bet_mov);
+                  toast('Movimento modificato');
+                  renderList();
+                });
+              }}, '✏️ Modifica'),
+              E('button', {class:'b sm r', style:'flex:1', onclick: () => {
+                if (confirm('Vuoi davvero stornare/eliminare questo movimento?')) {
+                  S.bet_mov = (S.bet_mov || []).filter(x => x.id !== mov.id);
+                  saveDoc('bet_mov', S.bet_mov);
+                  log('Storno movimento scommesse', mov.cliente || 'Cassa', `${eur(mov.imp)} – ${mov.causale || ''}`);
+                  toast('Movimento stornato ed eliminato');
+                  renderList();
+                }
+              }}, '🗑️ Storna / Elimina')
             )
           );
+
+          histList.append(cardMov);
         });
       }
 
