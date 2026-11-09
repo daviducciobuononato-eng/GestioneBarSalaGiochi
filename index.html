@@ -1351,19 +1351,37 @@ function betTurnoView(m){
 
   const t = totBet(s);
 
-  // CALCOLO REGISTRO TURNO:
-  // Operazioni ROSSE (Debiti, Uscite, Pagamenti) = (+)
-  // Operazioni VERDI (Entrate, Incassi, Accrediti) = (-)
+  // CALCOLO REGISTRO TURNO (ESCLUSIVAMENTE OPERAZIONI FUORI CASSETTO):
   const movsShift = (S.bet_mov || []).filter(x => String(x.s) === String(s.id));
-  let totaleRossi = 0;
-  let totaleVerdi = 0;
+  let totaleRossi = 0; // Debiti clienti + Pagamenti Danilo
+  let totaleVerdi = 0; // Accrediti/Vincite a saldo cliente + Incassi Danilo
 
   movsShift.forEach(x => {
-    const isRed = (x.tipo === 'debito' || x.tipo === 'paga' || x.tipo === 'uscita');
-    if (isRed) {
+    const isDanilo = !!x.daniloNoCassa;
+    const isRicarica = (x.causale || '').toLowerCase().includes('ricarica');
+    const isBanco = !!x.pagatoContantiBanco;
+
+    if (x.tipo === 'debito') {
+      // I debiti generano debito al cliente senza toccare il cassetto -> Registro Rossi
       totaleRossi += x.imp;
-    } else {
-      totaleVerdi += x.imp;
+    } else if (x.tipo === 'accredito') {
+      // Se l'accredito non è entrato in cassa (es. ricarica contanti o banco), aumenta il credito cliente -> Registro Verdi
+      const incideCassa = (isRicarica && !isDanilo) || isBanco;
+      if (!incideCassa) {
+        totaleVerdi += x.imp;
+      }
+    } else if (x.tipo === 'incasso_debito') {
+      if (isDanilo) {
+        totaleVerdi += x.imp;
+      }
+    } else if (x.tipo === 'paga' || x.tipo === 'uscita') {
+      if (isDanilo) {
+        totaleRossi += x.imp;
+      }
+    } else if (x.tipo === 'entrata') {
+      if (isDanilo) {
+        totaleVerdi += x.imp;
+      }
     }
   });
 
@@ -1387,11 +1405,11 @@ function betTurnoView(m){
           E('b', {style:'font-size:24px;display:block;margin-top:2px'}, eur(t.teo)),
           E('small', {style:'margin-top:4px;display:block;opacity:0.9;font-size:11px'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(t.cassaIn - t.pag)}`)
         ),
-        // REGISTRO TURNO (BLU)
+        // REGISTRO TURNO (BLU) - SOLO NON CASSETTO
         E('div', {style:'background:#1e3a8a;color:#fff;padding:14px;border-radius:8px'},
-          E('small', {style:'font-weight:bold;letter-spacing:0.5px'}, '📋 REGISTRO TURNO (TUTTE LE OPERAZIONI)'),
+          E('small', {style:'font-weight:bold;letter-spacing:0.5px'}, '📋 REGISTRO TURNO (NON INCIDE CASSETTO)'),
           E('b', {style:'font-size:24px;display:block;margin-top:2px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9;font-size:11px'}, `Operazioni Rosse (${eur(totaleRossi)}) - Operazioni Verdi (${eur(totaleVerdi)})`)
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9;font-size:11px'}, `Debiti/Rossi non cassa (${eur(totaleRossi)}) - Crediti/Verdi non cassa (${eur(totaleVerdi)})`)
         )
       )
     ),
