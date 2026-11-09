@@ -1224,13 +1224,7 @@ function betClientiView(m) {
 
     E('div', {class:'f', style:'margin-bottom:12px'},
       E('button', {class:'b g sm', style:'flex:1;padding:8px;font-size:13px', onclick: () => apriModalScommessa('debito')}, '+ Nuovo Cliente Scommesse'),
-      E('button', {class:'b r sm', style:'flex:1;padding:8px;font-size:13px', onclick: () => {
-        if(confirm('Attenzione: vuoi davvero eliminare tutti i clienti scommesse?')) {
-          S.clienti = S.clienti.filter(x => x.tipo !== 'bet');
-          saveDoc('clienti', S.clienti);
-          toast('Clienti scommesse eliminati');
-        }
-      }}, '🗑️ Elimina tutti i clienti')
+      E('button', {class:'b r sm', style:'flex:1;padding:8px;font-size:13px', onclick: eliminaTuttiClientiBet}, '🗑️ Elimina tutti i clienti')
     )
   );
 
@@ -1288,29 +1282,8 @@ function betClientiView(m) {
             E('div', {class:'mu sm', style:'margin-top:2px;font-size:11px'}, `${dt(mov.t)} · Op: ${mov.opn || 'Admin'} · Turno: ${mov.sNum || tnBet(mov.s)}`),
             E('div', {class:'sm', style:'margin-top:2px'}, `Causale: ${mov.causale || 'Nessuna'}`),
             E('div', {class:'f', style:'margin-top:8px;gap:6px'},
-              E('button', {class:'b sm', style:'flex:1;background:#fff;border:1px solid var(--bd);padding:4px 8px;font-size:12px', onclick: () => {
-                form('Modifica Movimento', [
-                  {l:'Importo (€)', k:'imp', m:'decimal', v:(mov.imp/100).toFixed(2).replace('.',',')},
-                  {l:'Causale / Note', k:'causale', v: mov.causale || ''}
-                ], v => {
-                  const newImp = par(v.imp);
-                  if (newImp <= 0) { alert('Importo non valido'); return false; }
-                  mov.imp = newImp;
-                  mov.causale = v.causale || '';
-                  saveDoc('bet_mov', S.bet_mov);
-                  toast('Movimento modificato');
-                  renderList();
-                });
-              }}, '✏️ Modifica'),
-              E('button', {class:'b sm r', style:'flex:1;padding:4px 8px;font-size:12px', onclick: () => {
-                if (confirm('Vuoi davvero stornare/eliminare questo movimento?')) {
-                  S.bet_mov = (S.bet_mov || []).filter(x => x.id !== mov.id);
-                  saveDoc('bet_mov', S.bet_mov);
-                  log('Storno movimento scommesse', mov.cliente || 'Cassa', `${eur(mov.imp)} – ${mov.causale || ''}`);
-                  toast('Movimento stornato ed eliminato');
-                  renderList();
-                }
-              }}, '🗑️ Storna / Elimina')
+              E('button', {class:'b sm', style:'flex:1;background:#fff;border:1px solid var(--bd);padding:4px 8px;font-size:12px', onclick: () => modificaMovimentoBetModal(mov)}, '✏️ Modifica'),
+              E('button', {class:'b sm r', style:'flex:1;padding:4px 8px;font-size:12px', onclick: () => eliminaMovimentoBet(mov)}, '🗑️ Storna / Elimina')
             )
           );
 
@@ -1323,14 +1296,7 @@ function betClientiView(m) {
           E('div', {class:'row', style:'border:0;padding:0'},
             E('div', {},
               E('b', {style:'font-size:18px'}, c.nome),
-              E('button', {class:'b sm', style:'margin-left:8px;padding:2px 6px;font-size:11px', onclick: () => {
-                const nn = prompt('Nuovo nome cliente:', c.nome);
-                if (nn && nn.trim()) {
-                  c.nome = nn.trim();
-                  saveDoc('clienti', c);
-                  toast('Nome cliente aggiornato');
-                }
-              }}, '✏️ Modifica Nome')
+              E('button', {class:'b sm', style:'margin-left:8px;padding:2px 6px;font-size:11px', onclick: () => modificaNomeClienteBet(c)}, '✏️ Modifica Nome')
             ),
             E('div', {style:'text-align:right'},
               isDeb ? E('b', {class:'neg', style:'font-size:18px'}, `Debito: ${eur(st.saldoNetto)}`) :
@@ -1346,8 +1312,8 @@ function betClientiView(m) {
             E('button', {class:'b sm r', style:'padding:6px 4px;font-size:12px;min-height:auto', onclick: () => apriModalScommessa('paga', c.id)}, '💸 Paga il cliente'),
             E('button', {class:'b sm g', style:'grid-column:span 2;padding:5px 4px;font-size:11px;opacity:0.85;min-height:auto', onclick: () => {
               if (confirm(`Eliminare il cliente ${c.nome}?`)) {
-                S.clienti = S.clienti.filter(x => x.id !== c.id);
-                saveDoc('clienti', S.clienti);
+                removeDoc('clienti', c.id);
+                log('Eliminato cliente scommesse', 'cliente_bet', c.nome);
                 toast('Cliente eliminato');
               }
             }}, '🗑️ Elimina cliente')
