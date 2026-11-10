@@ -1451,7 +1451,7 @@ function betTurnoView(m){
         totaleVerdi += x.imp;
       }
     } else if (x.tipo === 'incasso_debito') {
-      if (isDanilo) {
+      if (!isDanilo) {
         totaleVerdi += x.imp;
       }
     } else if (x.tipo === 'paga' || x.tipo === 'uscita') {
@@ -1487,7 +1487,7 @@ function betTurnoView(m){
         E('div', {style:'background:#1e3a8a;color:#fff;padding:14px;border-radius:8px'},
           E('small', {style:'font-weight:bold;letter-spacing:0.5px'}, '📋 REGISTRO TURNO (NON INCIDE CASSETTO)'),
           E('b', {style:'font-size:24px;display:block;margin-top:2px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9;font-size:11px'}, `Debiti/Rossi non cassa (${eur(totaleRossi)}) - Crediti/Verdi non cassa (${eur(totaleVerdi)})`)
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9;font-size:11px'}, `Debiti/Rossi (${eur(totaleRossi)}) - Crediti/Verdi/Incassi (${eur(totaleVerdi)})`)
         )
       )
     ),
