@@ -45,6 +45,7 @@ const $=s=>document.querySelector(s),
 E=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);else if(k==='v')e.value=a[k];else e.setAttribute(k,a[k])}c.flat().forEach(x=>x!=null&&x!==false&&e.append(x.nodeType?x:document.createTextNode(x)));return e},
 eur=c=>(c<0?'−':'')+(Math.abs(c)/100).toFixed(2).replace('.',',')+' €',
 par=s=>Math.round(parseFloat(String(s).replace(',','.'))*100)||0,
+normName=s=>(s||'').trim().toLowerCase().replace(/\s+/g,' '),
 dt=t=>new Date(t).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}),
 dtFull=t=>{const d=new Date(t);return isNaN(d)?'':d.toLocaleString('it-IT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})},
 RN={prop:'Proprietario',resp:'Responsabile',dip:'Dipendente'},
@@ -94,7 +95,6 @@ function saveDoc(colName, d){
   const C = getCOL();
   const cName = C[colName] || colName;
   const idStr = String(d.id);
-  // Usa { merge: true } per evitare che update o scritture sovrascrivano interamente i documenti
   return setDoc(doc(db, cName, idStr), JSON.parse(JSON.stringify(d)), { merge: true }).catch(err);
 }
 
@@ -102,6 +102,53 @@ function removeDoc(colName, id){
   const C = getCOL();
   const cName = C[colName] || colName;
   return deleteDoc(doc(db, cName, String(id))).catch(err);
+}
+
+async function renameCustomerCascade(oldName, newName, tipo = 'bet'){
+  const oldNorm = normName(oldName);
+  const newTrim = newName.trim();
+  if(!newTrim || oldNorm === normName(newTrim)) return;
+
+  const targetClient = (S.clienti || []).find(c => normName(c.nome) === oldNorm && (tipo === 'all' || c.tipo === tipo || (!c.tipo && tipo === 'bet')));
+  if(targetClient){
+    targetClient.nome = newTrim;
+    await saveDoc('clienti', targetClient);
+  }
+
+  const betMovsToUpdate = (S.bet_mov || []).filter(m => m.cliente && normName(m.cliente) === oldNorm);
+  for(const m of betMovsToUpdate){
+    m.cliente = newTrim;
+    await saveDoc('bet_mov', m);
+  }
+
+  const salesToUpdate = (S.sales || []).filter(s => s.sospesoCliente && normName(s.sospesoCliente) === oldNorm);
+  for(const s of salesToUpdate){
+    s.sospesoCliente = newTrim;
+    await saveDoc('sales', s);
+  }
+
+  const movsToUpdate = (S.mov || []).filter(m => m.motivo && normName(m.motivo).includes(oldNorm));
+  for(const m of movsToUpdate){
+    m.motivo = m.motivo.replace(new RegExp(oldName, 'gi'), newTrim);
+    await saveDoc('mov', m);
+  }
+}
+
+async function deleteCustomerCascade(clientObj){
+  const targetNorm = normName(clientObj.nome);
+
+  const existingInDb = (S.clienti || []).filter(x => normName(x.nome) === targetNorm);
+  for(const c of existingInDb){
+    await removeDoc('clienti', c.id);
+  }
+
+  const relatedBetMovs = (S.bet_mov || []).filter(m => m.cliente && normName(m.cliente) === targetNorm);
+  for(const m of relatedBetMovs){
+    await removeDoc('bet_mov', m.id);
+  }
+
+  log('Cliente eliminato con storico', 'cliente', clientObj.nome);
+  toast(`Cliente ${clientObj.nome} eliminato definitivamente`);
 }
 
 function merge(){for(const k of['sales','mov']){S[k]=[...part[k].hist,...part[k].cur].sort(cmp)}}
@@ -143,7 +190,6 @@ function start(){
   L('cats',collection(db, C.cats));
   L('prods',collection(db, C.prods));
   L('clienti',collection(db, C.clienti));
-  // Sincronizzazione completa dei movimenti per evitare azzeramento saldi oltre 100 operazioni
   L('bet_mov',collection(db, C.bet_mov));
   L('bet_ses',collection(db, C.bet_ses));
   L('ses',collection(db, C.ses),()=>{
@@ -294,8 +340,8 @@ function vendita(m,s){
         let cli = null;
         if (v.c === 'NEW' || (!v.c && v.new_name)) {
           if (!v.new_name) { alert('Inserisci il nome del nuovo cliente.'); return false; }
-          cli = { id: nid('cli'), nome: v.new_name, tel: v.new_tel || '', sospeso: 0, storico: [], tipo: 'bar' };
-          log('Nuovo cliente', 'cliente', v.new_name);
+          cli = { id: nid('cli'), nome: v.new_name.trim(), tel: v.new_tel || '', sospeso: 0, storico: [], tipo: 'bar' };
+          log('Nuovo cliente', 'cliente', v.new_name.trim());
         } else if (v.c) {
           cli = S.clienti.find(x => String(x.id) === String(v.c));
         }
@@ -329,6 +375,7 @@ function vendita(m,s){
     E('button',{class:'b',onclick:()=>{const items=ids.map(i=>{const p=S.prods.find(x=>String(x.id)==String(i));return{pid:p.id,n:p.nome,p:p.p,q:cart[i]}}),n=nid('s'),rc=par(r.value);const sObj={id:n,s:s.id,op:me.id,opn:me.nome,t:Date.now(),tot:T,items,cash:rc||null};saveDoc('sales', sObj);log('Vendita','vendita '+vn(n),eur(T));cart={};toast(`Vendita ${vn(n)} registrata: ${eur(T)}${rc>=T?' · resto '+eur(rc-T):''}`)}},'INCASSA CONTANTI')
   ))}
  m.append(cd)}
+
 function tot(s){
  const v=S.sales.filter(x=>String(x.s)===String(s.id)),m=S.mov.filter(x=>String(x.s)===String(s.id)),
  rawSalesTotal=v.reduce((a,x)=>a+x.tot,0),
@@ -408,81 +455,83 @@ function selectModuleScreen(){
 }
 
 function render(){ 
- clearTimeout(idle);
+  window.S = S; // Esposizione per debugging console
+
+  clearTimeout(idle);
  
- const activeEl = document.activeElement;
- const activeId = activeEl && activeEl.id ? activeEl.id : null;
- const selStart = (activeEl && 'selectionStart' in activeEl) ? activeEl.selectionStart : null;
- const selEnd = (activeEl && 'selectionEnd' in activeEl) ? activeEl.selectionEnd : null;
+  const activeEl = document.activeElement;
+  const activeId = activeEl && activeEl.id ? activeEl.id : null;
+  const selStart = (activeEl && 'selectionStart' in activeEl) ? activeEl.selectionStart : null;
+  const selEnd = (activeEl && 'selectionEnd' in activeEl) ? activeEl.selectionEnd : null;
 
- const a=$('#app');a.replaceChildren();
- if(!me){a.append(login());return}
- idle=setTimeout(()=>{lock()},120000);
+  const a=$('#app');a.replaceChildren();
+  if(!me){a.append(login());return}
+  idle=setTimeout(()=>{lock()},120000);
 
- if(isBetUser() && !activeModule){
-   a.append(selectModuleScreen());
-   return;
- }
+  if(isBetUser() && !activeModule){
+    a.append(selectModuleScreen());
+    return;
+  }
 
- const s=cur();
+  const s=cur();
  
- if(isTestMode){
-   a.append(E('div',{class:'test-banner'},'🧪 AMBIENTE TEST ATTIVO — Dati e Turni di Prova Isolati'));
- }
+  if(isTestMode){
+    a.append(E('div',{class:'test-banner'},'🧪 AMBIENTE TEST ATTIVO — Dati e Turni di Prova Isolati'));
+  }
 
- const isBarModule = (activeModule === 'bar');
+  const isBarModule = (activeModule === 'bar');
 
- a.append(E('header',{},
-   E('b',{},
-     isBarModule ? '🍺 Bar' : '🎰 Registro Scommesse',
-     E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno Bar Aperto':'Turno Bar Chiuso'}`)
-   ),
-   isBetUser()?E('button',{class:'b g s',onclick:()=>{activeModule=null;scheduleRender()}},'🔀 Sezione'):null,
-   isDavide()?E('button',{class:isTestMode?'b r s':'b g s',style:isTestMode?'background:#d9381e;color:#fff':'border-color:#b4471f;color:#b4471f;font-weight:bold',onclick:toggleTestMode},isTestMode?'← Dati Reali':'🧪 Test Mode'):null,
-   E('button',{class:'b g s',onclick:cambioPin},'PIN'),
-   E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')
- ));
+  a.append(E('header',{},
+    E('b',{},
+      isBarModule ? '🍺 Bar' : '🎰 Registro Scommesse',
+      E('small',{},`${me.nome} · ${RN[me.ruolo]} · ${s?'Turno Bar Aperto':'Turno Bar Chiuso'}`)
+    ),
+    isBetUser()?E('button',{class:'b g s',onclick:()=>{activeModule=null;scheduleRender()}},'🔀 Sezione'):null,
+    isDavide()?E('button',{class:isTestMode?'b r s':'b g s',style:isTestMode?'background:#d9381e;color:#fff':'border-color:#b4471f;color:#b4471f;font-weight:bold',onclick:toggleTestMode},isTestMode?'← Dati Reali':'🧪 Test Mode'):null,
+    E('button',{class:'b g s',onclick:cambioPin},'PIN'),
+    E('button',{class:'b g s',onclick:()=>{lock()}},'🔒 Esci')
+  ));
 
- const m=E('main');a.append(m);if(msg){m.append(E('div',{class:'cd neg',style:'font-weight:bold;margin-bottom:12px'},msg));msg=''}
+  const m=E('main');a.append(m);if(msg){m.append(E('div',{class:'cd neg',style:'font-weight:bold;margin-bottom:12px'},msg));msg=''}
  
- const views = {
-   v: vendita,
-   t: turno,
-   c: clienti,
-   s: storico,
-   a: admin,
-   k_clienti: betClientiView,
-   k_turno: betTurnoView,
-   k_storico: betStoricoView
- };
+  const views = {
+    v: vendita,
+    t: turno,
+    c: clienti,
+    s: storico,
+    a: admin,
+    k_clienti: betClientiView,
+    k_turno: betTurnoView,
+    k_storico: betStoricoView
+  };
 
- if (isBarModule) {
-   (views[tab] || vendita)(m, s);
-   a.append(E('nav',{},[
-     ['v','BAR'],
-     ['t','Turno'],
-     ['c','Clienti'],
-     can('storico')&&['s','Storico'],
-     can('catalogo')&&['a','Gestione']
-   ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;scheduleRender()}},l))));
- } else {
-   (views[tab] || betClientiView)(m);
-   a.append(E('nav',{},[
-     ['k_clienti','👥 Clienti'],
-     ['k_turno','🎰 Turno'],
-     ['k_storico','📊 Storico']
-   ].map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;scheduleRender()}},l))));
- }
+  if (isBarModule) {
+    (views[tab] || vendita)(m, s);
+    a.append(E('nav',{},[
+      ['v','BAR'],
+      ['t','Turno'],
+      ['c','Clienti'],
+      can('storico')&&['s','Storico'],
+      can('catalogo')&&['a','Gestione']
+    ].filter(Boolean).map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;scheduleRender()}},l))));
+  } else {
+    (views[tab] || betClientiView)(m);
+    a.append(E('nav',{},[
+      ['k_clienti','👥 Clienti'],
+      ['k_turno','🎰 Turno'],
+      ['k_storico','📊 Storico']
+    ].map(([k,l])=>E('button',{class:tab===k?'on':'',onclick:()=>{tab=k;scheduleRender()}},l))));
+  }
 
- if (activeId) {
-   const elToFocus = document.getElementById(activeId);
-   if (elToFocus) {
-     elToFocus.focus();
-     if (selStart !== null && selEnd !== null && 'setSelectionRange' in elToFocus) {
-       try { elToFocus.setSelectionRange(selStart, selEnd); } catch(e){}
-     }
-   }
- }
+  if (activeId) {
+    const elToFocus = document.getElementById(activeId);
+    if (elToFocus) {
+      elToFocus.focus();
+      if (selStart !== null && selEnd !== null && 'setSelectionRange' in elToFocus) {
+        try { elToFocus.setSelectionRange(selStart, selEnd); } catch(e){}
+      }
+    }
+  }
 }
 ['pointerdown','keydown'].forEach(e=>addEventListener(e,()=>{if(me){clearTimeout(idle);idle=setTimeout(()=>{lock()},120000)}}));
 
@@ -510,7 +559,6 @@ function turno(m,s){
     ['Debiti (solo informativo)',t.totDebitiCreati]
   ].map(([l,v])=>E('div',{},E('small',{},l),E('b',{},eur(v)))),E('div',{class:'w'},E('small',{},'CASSETTO'),E('b',{style:'font-size:26px'},eur(t.teo)))));
 
-  // Entrata e Uscita manuale accessibili a TUTTI i dipendenti
   m.append(E('div',{class:'f',style:'margin-top:10px;gap:8px;flex-wrap:wrap'},
     E('button',{class:'b g',style:'flex:1',onclick:()=>mov('entrata')},'+ Entrata'),
     E('button',{class:'b g',style:'flex:1',onclick:()=>mov('uscita')},'− Uscita'),
@@ -568,6 +616,24 @@ async function modificaMovimentoCliente(c, st) {
   });
 }
 
+function modificaNomeClienteBar(c){
+  const oldName = c.nome;
+  form(`Modifica Nome Cliente Bar`, [
+    {l:'Nuovo Nome Cliente', k:'n', v: oldName}
+  ], async v => {
+    const newName = v.n ? v.n.trim() : '';
+    if(!newName){ alert('Nome non valido'); return false; }
+    if(newName.toLowerCase() !== oldName.toLowerCase() && S.clienti.some(x => x.tipo !== 'bet' && normName(x.nome) === normName(newName))){
+      alert('Un cliente bar con questo nome esiste già.');
+      return false;
+    }
+
+    await renameCustomerCascade(oldName, newName, 'bar');
+    log('Modifica nome cliente bar', oldName, `Nuovo nome: ${newName}`);
+    toast('Nome cliente bar aggiornato a cascata');
+  });
+}
+
 function clienti(m,s){
   const barClients = S.clienti.filter(x => x.tipo !== 'bet');
   const totDebiti=barClients.filter(x=>(x.sospeso||0)>0).reduce((a,x)=>a+(x.sospeso||0),0);
@@ -584,9 +650,10 @@ function clienti(m,s){
     E('div',{class:'f',style:'margin-bottom:12px'},
       E('button',{class:'b',style:'width:100%',onclick:()=>{
         form('Nuovo Cliente Bar',[{l:'Nome e Cognome',k:'n'},{l:'Telefono (opzionale)',k:'t'}],v=>{
-          if(!v.n){alert('Nome obbligatorio');return false}
-          const c={id:nid('cli'),nome:v.n,tel:v.t||'',sospeso:0,storico:[],tipo:'bar'};
-          saveDoc('clienti', c);log('Nuovo cliente','cliente',v.n);toast('Cliente creato');
+          if(!v.n || !v.n.trim()){alert('Nome obbligatorio');return false}
+          const name = v.n.trim();
+          const c={id:nid('cli'),nome:name,tel:v.t||'',sospeso:0,storico:[],tipo:'bar'};
+          saveDoc('clienti', c);log('Nuovo cliente','cliente',name);toast('Cliente creato');
         })
       }},'+ Nuovo Cliente')
     ),
@@ -653,7 +720,11 @@ function clienti(m,s){
 
       containerList.append(E('div',{class:'cd'},
         E('div',{class:'row',style:'border:0'},
-          E('div',{},E('b',{},c.nome),c.tel?E('small',{class:'mu',style:'display:block'},c.tel):null),
+          E('div',{},
+            E('b',{},c.nome),
+            E('button', {class:'b sm', style:'margin-left:8px;padding:2px 6px;font-size:11px', onclick: () => modificaNomeClienteBar(c)}, '✏️ Modifica Nome'),
+            c.tel?E('small',{class:'mu',style:'display:block'},c.tel):null
+          ),
           E('b',{class:badgeClass,style:'font-size:18px'},labelText)
         ),
         E('div',{class:'f',style:'margin-top:8px'},
@@ -727,10 +798,10 @@ function clienti(m,s){
               log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);toast('Pagamento e incasso in cassa registrati');
             })
           }},'− Salda'),
-          sosp===0?E('button',{class:'b g s neg',style:'margin-left:auto',onclick:()=>{
-            if(confirm(`Eliminare il cliente ${c.nome}?`)){
-              removeDoc('clienti', c.id);
-              log('Cliente eliminato','cliente',c.nome);toast('Cliente eliminato');
+          sosp===0?E('button',{class:'b g s neg',style:'margin-left:auto',onclick:async ()=>{
+            if(confirm(`Eliminare definitivamente il cliente ${c.nome}?`)){
+              await deleteCustomerCascade(c);
+              scheduleRender();
             }
           }},'Elimina'):null
         ),
@@ -752,7 +823,7 @@ function totBet(s){
   let deb = 0, acc = 0, inc = 0, cassaIn = 0, pag = 0;
   
   allMovs.forEach(m => {
-    const cli = (m.cliente || '').trim().toLowerCase();
+    const cli = normName(m.cliente);
     const t = m.tipo;
     const imp = m.imp;
     const danilo = m.daniloNoCassa;
@@ -766,16 +837,15 @@ function totBet(s){
       else if (t === 'incasso_debito') inc += imp;
     }
 
-    // Se l'operazione è contrassegnata come diretta al banco/cassetto (saldo cliente invariato)
     if (pagatoBanco) {
       if (isThisShift && !danilo) {
         if (t === 'paga' || t === 'uscita') {
-          pag += imp; // Scala dal cassetto contanti
+          pag += imp;
         } else {
-          cassaIn += imp; // Entra nel cassetto contanti
+          cassaIn += imp;
         }
       }
-      return; // Ritorna subito lasciando invariato il saldo del cliente
+      return;
     }
 
     if (!cli || cli === 'cassa') {
@@ -938,8 +1008,9 @@ function getBetStatsShift(s){
 
 function getBetClientStats(clientName){
   const activeShift = curBet();
+  const targetNorm = normName(clientName);
   const movs = (S.bet_mov || [])
-    .filter(x => x.cliente && x.cliente.trim().toLowerCase() === clientName.trim().toLowerCase());
+    .filter(x => x.cliente && normName(x.cliente) === targetNorm);
 
   let deb = 0, inc = 0, acc = 0, pag = 0, currAcc = 0;
 
@@ -962,7 +1033,6 @@ function getBetClientStats(clientName){
     }
   });
 
-  // CORREZIONE: 'pag' (soldi dati in contanti al cliente) riduce il credito accumulato
   const saldoNetto = (deb + pag) - (acc + inc);
   const debitoResiduo = Math.max(0, saldoNetto);
   
@@ -976,7 +1046,7 @@ function apriModalNuovoClienteBet(){
   ], v => {
     if(!v.n || !v.n.trim()){ alert('Nome obbligatorio'); return false; }
     const name = v.n.trim();
-    if (S.clienti.some(x => x.tipo === 'bet' && x.nome.toLowerCase() === name.toLowerCase())) {
+    if (S.clienti.some(x => (x.tipo === 'bet' || !x.tipo) && normName(x.nome) === normName(name))) {
       alert('Un cliente con questo nome esiste già.');
       return false;
     }
@@ -986,52 +1056,47 @@ function apriModalNuovoClienteBet(){
     toast('Cliente scommesse creato');
   });
 }
-function eliminaClienteBet(c){
+
+async function eliminaClienteBet(c){
   const st = getBetClientStats(c.nome);
   if (st.saldoNetto !== 0) {
     alert(`Impossibile eliminare: il cliente ha un saldo aperto (${eur(st.saldoNetto)}). Salda o azzera il conto prima di eliminare.`);
     return;
   }
-  if (!confirm(`Sei sicuro di voler eliminare il cliente ${c.nome}?`)) return;
-  removeDoc('clienti', c.id);
-  log('Eliminato cliente scommesse', 'cliente_bet', c.nome);
-  toast('Cliente eliminato');
+  if (!confirm(`Sei sicuro di voler eliminare definitivamente il cliente ${c.nome} e tutti i suoi movimenti storici?`)) return;
+  await deleteCustomerCascade(c);
+  scheduleRender();
 }
 
 async function eliminaTuttiClientiBet(){
-  if (!confirm("ATTENZIONE: Sei sicuro di voler eliminare TUTTI i clienti scommesse? L'operazione non è reversibile!")) return;
-  const betClients = S.clienti.filter(x => x.tipo === 'bet');
+  if (!confirm("ATTENZIONE: Sei sicuro di voler eliminare TUTTI i clienti scommesse e i relativi movimenti? L'operazione non è reversibile!")) return;
+  const betClients = S.clienti.filter(x => !x.tipo || x.tipo === 'bet');
   for (const c of betClients) {
-    removeDoc('clienti', c.id);
+    await removeDoc('clienti', c.id);
   }
-  log('Eliminati tutti i clienti scommesse', 'clienti_bet', 'Tutti i clienti scommesse eliminati');
-  toast('Tutti i clienti scommesse sono stati eliminati');
+  const allBetMovs = (S.bet_mov || []).filter(m => m.cliente && m.cliente.toUpperCase() !== 'CASSA');
+  for (const m of allBetMovs) {
+    await removeDoc('bet_mov', m.id);
+  }
+  log('Eliminati tutti i clienti scommesse', 'clienti_bet', 'Tutti i clienti scommesse ed i loro movimenti eliminati');
+  toast('Tutti i clienti scommesse e i relativi movimenti sono stati eliminati');
 }
 
 function modificaNomeClienteBet(c){
   const oldName = c.nome;
   form(`Modifica Nome Cliente`, [
     {l:'Nuovo Nome Cliente', k:'n', v: oldName}
-  ], v => {
+  ], async v => {
     const newName = v.n ? v.n.trim() : '';
     if(!newName){ alert('Nome non valido'); return false; }
-    if(newName.toLowerCase() !== oldName.toLowerCase() && S.clienti.some(x => x.tipo === 'bet' && x.nome.toLowerCase() === newName.toLowerCase())){
+    if(normName(newName) !== normName(oldName) && S.clienti.some(x => (x.tipo === 'bet' || !x.tipo) && normName(x.nome) === normName(newName))){
       alert('Un cliente con questo nome esiste già.');
       return false;
     }
 
-    c.nome = newName;
-    saveDoc('clienti', c);
-
-    (S.bet_mov || []).forEach(m => {
-      if(m.cliente && m.cliente.trim().toLowerCase() === oldName.trim().toLowerCase()){
-        m.cliente = newName;
-        saveDoc('bet_mov', m);
-      }
-    });
-
+    await renameCustomerCascade(oldName, newName, 'bet');
     log('Modifica nome cliente scommesse', oldName, `Nuovo nome: ${newName}`);
-    toast('Nome cliente aggiornato');
+    toast('Nome cliente e storico movimenti aggiornati');
   });
 }
 
@@ -1057,7 +1122,7 @@ function modificaMovimentoBetModal(m){
 
 async function eliminaMovimentoBet(m){
   if(!confirm(`Sei sicuro di voler eliminare/stornare questa operazione di ${eur(m.imp)} per ${m.cliente}?`)) return;
-  removeDoc('bet_mov', m.id);
+  await removeDoc('bet_mov', m.id);
   log('Storno/Eliminazione movimento scommesse', m.cliente || 'cassa', `${eur(m.imp)} – ${m.causale || ''}`);
   toast('Operazione stornata / eliminata');
 }
@@ -1153,12 +1218,13 @@ function chiudiBet(){
     }, 'r']
   ]);
 }
+
 async function deleteBetSes(shiftId){
   if(!confirm(`Sei sicuro di voler eliminare il Turno #${tnBet(shiftId)} e tutti i suoi movimenti?`)) return;
-  removeDoc('bet_ses', shiftId);
+  await removeDoc('bet_ses', shiftId);
 
   const movsToDelete = (S.bet_mov || []).filter(x => String(x.s) === String(shiftId));
-  movsToDelete.forEach(mo => removeDoc('bet_mov', mo.id));
+  for(const mo of movsToDelete) await removeDoc('bet_mov', mo.id);
 
   log('Eliminato turno scommesse', 'turno_bet #' + tnBet(shiftId), `Turno ID ${shiftId}`);
   toast('Turno scommesse eliminato');
@@ -1169,8 +1235,8 @@ async function deleteAllBetSes(){
   const sesIds = (S.bet_ses || []).map(x => x.id);
   const movIds = (S.bet_mov || []).map(x => x.id);
 
-  for(const id of sesIds) removeDoc('bet_ses', id);
-  for(const id of movIds) removeDoc('bet_mov', id);
+  for(const id of sesIds) await removeDoc('bet_ses', id);
+  for(const id of movIds) await removeDoc('bet_mov', id);
 
   log('Eliminati tutti i turni scommesse', 'turni_bet', 'Tutti i turni scommesse cancellati');
   toast('Tutti i turni scommesse sono stati eliminati');
@@ -1199,20 +1265,17 @@ function mostraOperazioniTurnoBet(s){
 }
 
 function betClientiView(m) {
-  // Raccoglie tutti i clienti scommesse e quelli che hanno movimenti scommesse a loro nome
   const betClientsMap = new Map();
 
-  // 1. Aggiungi i clienti registrati come bet o senza tipo specifico
   (S.clienti || []).forEach(c => {
     if (!c.tipo || c.tipo === 'bet') {
-      betClientsMap.set(c.nome.trim().toLowerCase(), c);
+      betClientsMap.set(normName(c.nome), c);
     }
   });
 
-  // 2. Aggiungi eventuali clienti presenti nei movimenti ma non ancora presenti nella mappa
   (S.bet_mov || []).forEach(mov => {
     if (mov.cliente && mov.cliente.toUpperCase() !== 'CASSA') {
-      const key = mov.cliente.trim().toLowerCase();
+      const key = normName(mov.cliente);
       if (!betClientsMap.has(key)) {
         betClientsMap.set(key, { id: nid('cli'), nome: mov.cliente.trim(), tipo: 'bet' });
       }
@@ -1243,7 +1306,7 @@ function betClientiView(m) {
     ),
 
     E('div', {class:'f', style:'margin-bottom:12px'},
-      E('button', {class:'b g sm', style:'flex:1;padding:8px;font-size:13px', onclick: () => apriModalScommessa('debito')}, '+ Nuovo Cliente Scommesse'),
+      E('button', {class:'b g sm', style:'flex:1;padding:8px;font-size:13px', onclick: apriModalNuovoClienteBet}, '+ Nuovo Cliente Scommesse'),
       E('button', {class:'b r sm', style:'flex:1;padding:8px;font-size:13px', onclick: eliminaTuttiClientiBet}, '🗑️ Elimina tutti i clienti')
     )
   );
@@ -1284,7 +1347,7 @@ function betClientiView(m) {
       const isCred = st.saldoNetto < 0;
 
       const cliMovs = (S.bet_mov || [])
-        .filter(x => x.cliente && x.cliente.trim().toLowerCase() === c.nome.trim().toLowerCase())
+        .filter(x => x.cliente && normName(x.cliente) === normName(c.nome))
         .sort((a,b) => b.t - a.t);
 
       const histList = E('div', {style:'margin-top:6px'});
@@ -1330,13 +1393,7 @@ function betClientiView(m) {
             E('button', {class:'b sm', style:'padding:6px 4px;font-size:12px;min-height:auto', onclick: () => apriModalScommessa('accredito', c.id)}, '+ Accredito/ricarica'),
             E('button', {class:'b sm', style:'padding:6px 4px;font-size:12px;min-height:auto', onclick: () => apriModalScommessa('incasso', c.id)}, '− Incassa debito'),
             E('button', {class:'b sm r', style:'padding:6px 4px;font-size:12px;min-height:auto', onclick: () => apriModalScommessa('paga', c.id)}, '💸 Paga il cliente'),
-            E('button', {class:'b sm g', style:'grid-column:span 2;padding:5px 4px;font-size:11px;opacity:0.85;min-height:auto', onclick: () => {
-              if (confirm(`Eliminare il cliente ${c.nome}?`)) {
-                removeDoc('clienti', c.id);
-                log('Eliminato cliente scommesse', 'cliente_bet', c.nome);
-                toast('Cliente eliminato');
-              }
-            }}, '🗑️ Elimina cliente')
+            E('button', {class:'b sm g', style:'grid-column:span 2;padding:5px 4px;font-size:11px;opacity:0.85;min-height:auto', onclick: () => eliminaClienteBet(c)}, '🗑️ Elimina cliente')
           ),
           E('div', {style:'margin-top:8px'},
             E('details', {},
@@ -1373,10 +1430,9 @@ function betTurnoView(m){
 
   const t = totBet(s);
 
-  // CALCOLO REGISTRO TURNO (ESCLUSIVAMENTE OPERAZIONI FUORI CASSETTO):
   const movsShift = (S.bet_mov || []).filter(x => String(x.s) === String(s.id));
-  let totaleRossi = 0; // Debiti clienti + Pagamenti Danilo
-  let totaleVerdi = 0; // Accrediti/Vincite a saldo cliente + Incassi Danilo
+  let totaleRossi = 0;
+  let totaleVerdi = 0;
 
   movsShift.forEach(x => {
     const isDanilo = !!x.daniloNoCassa;
@@ -1384,10 +1440,8 @@ function betTurnoView(m){
     const isBanco = !!x.pagatoContantiBanco;
 
     if (x.tipo === 'debito') {
-      // I debiti generano debito al cliente senza toccare il cassetto -> Registro Rossi
       totaleRossi += x.imp;
     } else if (x.tipo === 'accredito') {
-      // Se l'accredito non è entrato in cassa (es. ricarica contanti o banco), aumenta il credito cliente -> Registro Verdi
       const incideCassa = (isRicarica && !isDanilo) || isBanco;
       if (!incideCassa) {
         totaleVerdi += x.imp;
@@ -1421,13 +1475,11 @@ function betTurnoView(m){
     E('div', {style:'margin-bottom:16px'},
       E('small', {class:'mu', style:'font-weight:bold;letter-spacing:0.5px;display:block;margin-bottom:6px'}, '1. CASSA & REGISTRO TURNO'),
       E('div', {class:'k', style:'grid-template-columns: 1fr 1fr; gap: 8px'},
-        // CASSETTO (VERDE)
         E('div', {style:'background:#2b7a4b;color:#fff;padding:14px;border-radius:8px'},
           E('small', {style:'font-weight:bold;letter-spacing:0.5px'}, '💵 CASSETTO (CONTANTE IN CASSA)'),
           E('b', {style:'font-size:24px;display:block;margin-top:2px'}, eur(t.teo)),
           E('small', {style:'margin-top:4px;display:block;opacity:0.9;font-size:11px'}, `Fondo iniziale: ${eur(s.fondo)} · Incassi netti: +${eur(t.cassaIn - t.pag)}`)
         ),
-        // REGISTRO TURNO (BLU) - SOLO NON CASSETTO
         E('div', {style:'background:#1e3a8a;color:#fff;padding:14px;border-radius:8px'},
           E('small', {style:'font-weight:bold;letter-spacing:0.5px'}, '📋 REGISTRO TURNO (NON INCIDE CASSETTO)'),
           E('b', {style:'font-size:24px;display:block;margin-top:2px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
@@ -1574,7 +1626,7 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
     return false;
   }
 
-  const betClients = S.clienti.filter(x => x.tipo === 'bet');
+  const betClients = S.clienti.filter(x => x.tipo === 'bet' || !x.tipo);
   const sortedClients = [...betClients].sort((a,b)=>a.nome.localeCompare(b.nome, 'it', {sensitivity: 'base'}));
   const optsClients = [['NEW', 'CREA NUOVO CLIENTE...'], ...sortedClients.map(x=>[x.id, x.nome])];
   
@@ -1610,9 +1662,6 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
     ? '💵 PAGA DAL CASSETTO (CLIENTE RIMANE INVARIATO)'
     : '💵 PAGATO SUBITO IN CONTANTI AL BANCO (entra in cassa, saldo cliente invariato)';
 
-  // Regole di visibilità opzioni extra:
-  // 1. In 'debito' (Segna al cliente) vengono rimossi sia Danilo che Pagato Subito
-  // 2. In 'incasso' viene rimosso Pagato Subito (resta Danilo)
   const showDanilo = (tipoOp !== 'debito');
   const showPagatoBanco = (tipoOp !== 'debito' && tipoOp !== 'incasso');
 
@@ -1713,12 +1762,12 @@ async function dl(name,data){try{const d=await window.claude?.use('downloads');i
 
 async function deleteSes(shiftId){
  if(!confirm(`Sei sicuro di voler eliminare il Turno #${tn(shiftId)} e tutte le sue operazioni?`)) return;
- removeDoc('ses', shiftId);
+ await removeDoc('ses', shiftId);
 
  const salesToDelete = S.sales.filter(x => String(x.s) === String(shiftId));
  const movToDelete = S.mov.filter(x => String(x.s) === String(shiftId));
- salesToDelete.forEach(sa => removeDoc('sales', sa.id));
- movToDelete.forEach(mo => removeDoc('mov', mo.id));
+ for(const sa of salesToDelete) await removeDoc('sales', sa.id);
+ for(const mo of movToDelete) await removeDoc('mov', mo.id);
 
  log('Eliminato turno', 'turno #' + tn(shiftId), `Turno ID ${shiftId}`);
  toast('Turno eliminato');
@@ -1730,9 +1779,9 @@ async function deleteAllSes(){
  const salesIds = S.sales.map(x => x.id);
  const movIds = S.mov.map(x => x.id);
 
- for(const id of sesIds) removeDoc('ses', id);
- for(const id of salesIds) removeDoc('sales', id);
- for(const id of movIds) removeDoc('mov', id);
+ for(const id of sesIds) await removeDoc('ses', id);
+ for(const id of salesIds) await removeDoc('sales', id);
+ for(const id of movIds) await removeDoc('mov', id);
 
  log('Eliminati tutti i turni', 'turni', 'Tutti i turni cancellati');
  toast('Tutti i turni sono stati eliminati');
