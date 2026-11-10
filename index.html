@@ -455,7 +455,7 @@ function selectModuleScreen(){
 }
 
 function render(){ 
-  window.S = S; // Esposizione per debugging console
+  window.S = S;
 
   clearTimeout(idle);
  
@@ -798,12 +798,16 @@ function clienti(m,s){
               log('Incassato saldo',c.nome,`${eur(imp)} - ${v.m||'Pagamento'}`);toast('Pagamento e incasso in cassa registrati');
             })
           }},'− Salda'),
-          sosp===0?E('button',{class:'b g s neg',style:'margin-left:auto',onclick:async ()=>{
-            if(confirm(`Eliminare definitivamente il cliente ${c.nome}?`)){
+          E('button',{class:'b g s neg',style:'margin-left:auto',onclick:async ()=>{
+            let msgConfirm = `Eliminare definitivamente il cliente Bar ${c.nome}?`;
+            if (sosp !== 0) {
+              msgConfirm = `⚠️ ATTENZIONE: Il cliente ${c.nome} ha un saldo aperto di ${eur(sosp)}!\nSei sicuro di volerlo eliminare comunque?`;
+            }
+            if(confirm(msgConfirm)){
               await deleteCustomerCascade(c);
               scheduleRender();
             }
-          }},'Elimina'):null
+          }},'Elimina')
         ),
         detailsEl
       ));
@@ -1059,11 +1063,11 @@ function apriModalNuovoClienteBet(){
 
 async function eliminaClienteBet(c){
   const st = getBetClientStats(c.nome);
+  let msgConfirm = `Sei sicuro di voler eliminare definitivamente il cliente ${c.nome} e tutti i suoi movimenti storici?`;
   if (st.saldoNetto !== 0) {
-    alert(`Impossibile eliminare: il cliente ha un saldo aperto (${eur(st.saldoNetto)}). Salda o azzera il conto prima di eliminare.`);
-    return;
+    msgConfirm = `⚠️ ATTENZIONE: Il cliente ${c.nome} ha un saldo aperto di ${eur(st.saldoNetto)}!\nSei sicuro di volerlo eliminare comunque insieme a tutto il suo storico?`;
   }
-  if (!confirm(`Sei sicuro di voler eliminare definitivamente il cliente ${c.nome} e tutti i suoi movimenti storici?`)) return;
+  if (!confirm(msgConfirm)) return;
   await deleteCustomerCascade(c);
   scheduleRender();
 }
