@@ -624,7 +624,7 @@ function modificaNomeClienteBar(c){
     const newName = v.n ? v.n.trim() : '';
     if(!newName){ alert('Nome non valido'); return false; }
     if(newName.toLowerCase() !== oldName.toLowerCase() && S.clienti.some(x => x.tipo !== 'bet' && normName(x.nome) === normName(newName))){
-      alert('Un cliente bar con questo nome esiste già.');
+      alert('Un cliente bar con questo nome existe già.');
       return false;
     }
 
@@ -914,7 +914,7 @@ function getBetStatsShift(s){
     totAccrediti: 0, accreditiVincite: 0, accreditiPrelievi: 0, 
     totRicariche: 0, totScommesseNetto: 0, scommesseGiocate: 0, scommesseVinte: 0, totPaga: 0,
     entrateManuali: 0, incassiDebiti: 0, usciteManuali: 0, vincitePagate: 0,
-    debitiDanilo: 0, incassiDanilo: 0
+    debitiDanilo: 0, incassiDanilo: 0, pagatiDanilo: 0, saldoNettoDanilo: 0
   };
   
   const movs = (S.bet_mov || []).filter(x => String(x.s) === String(s.id));
@@ -922,7 +922,7 @@ function getBetStatsShift(s){
   let totAccrediti = 0, accreditiVincite = 0, accreditiPrelievi = 0;
   let totRicariche = 0, scommesseGiocate = 0, scommesseVinte = 0, totPaga = 0;
   let entrateManuali = 0, incassiDebiti = 0, usciteManuali = 0, vincitePagate = 0;
-  let debitiDanilo = 0, incassiDanilo = 0;
+  let debitiDanilo = 0, incassiDanilo = 0, pagatiDanilo = 0;
   
   movs.forEach(m => {
     const c = (m.causale || '').toLowerCase();
@@ -934,8 +934,13 @@ function getBetStatsShift(s){
     if (isBiglietto) scommesseGiocate += m.imp;
 
     if (m.daniloNoCassa) {
-      if (m.tipo === 'debito') debitiDanilo += m.imp;
-      else if (m.tipo === 'incasso_debito' || m.tipo === 'accredito' || m.tipo === 'paga') incassiDanilo += m.imp;
+      if (m.tipo === 'debito') {
+        debitiDanilo += m.imp;
+      } else if (m.tipo === 'incasso_debito' || m.tipo === 'entrata') {
+        incassiDanilo += m.imp;
+      } else if (m.tipo === 'paga' || m.tipo === 'accredito' || m.tipo === 'uscita') {
+        pagatiDanilo += m.imp;
+      }
     }
 
     if (m.tipo === 'debito') {
@@ -987,6 +992,7 @@ function getBetStatsShift(s){
   });
 
   const totScommesseNetto = scommesseGiocate - scommesseVinte;
+  const saldoNettoDanilo = incassiDanilo - pagatiDanilo;
 
   return { 
     totDebiti, 
@@ -1006,7 +1012,9 @@ function getBetStatsShift(s){
     usciteManuali,
     vincitePagate,
     debitiDanilo,
-    incassiDanilo
+    incassiDanilo,
+    pagatiDanilo,
+    saldoNettoDanilo
   };
 }
 
@@ -1487,7 +1495,7 @@ function betTurnoView(m){
         E('div', {style:'background:#1e3a8a;color:#fff;padding:14px;border-radius:8px'},
           E('small', {style:'font-weight:bold;letter-spacing:0.5px'}, '📋 REGISTRO TURNO (NON INCIDE CASSETTO)'),
           E('b', {style:'font-size:24px;display:block;margin-top:2px'}, (totaleRegistro > 0 ? '+' : '') + eur(totaleRegistro)),
-          E('small', {style:'margin-top:4px;display:block;opacity:0.9;font-size:11px'}, `Debiti/Rossi (${eur(totaleRossi)}) - Crediti/Verdi/Incassi (${eur(totaleVerdi)})`)
+          E('small', {style:'margin-top:4px;display:block;opacity:0.9;font-size:11px'}, `Debiti/Rossi (${eur(totaleRossi)}) - Crediti/Verdi (${eur(totaleVerdi)})`)
         )
       )
     ),
@@ -1522,8 +1530,11 @@ function betTurnoView(m){
         ),
         E('div', {style:'border-left:3px solid #2b7a4b;padding-left:8px'},
           E('small', {}, '👤 SALDI / INCASSI DANILO'),
-          E('b', {class:'pos', style:'font-size:18px;display:block;margin-top:2px'}, eur(shiftStats.incassiDanilo)),
-          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, 'Non incidono sul cassetto contanti')
+          E('b', {
+            class: shiftStats.saldoNettoDanilo > 0 ? 'pos' : shiftStats.saldoNettoDanilo < 0 ? 'neg' : 'mu', 
+            style:'font-size:18px;display:block;margin-top:2px'
+          }, (shiftStats.saldoNettoDanilo > 0 ? '+' : '') + eur(shiftStats.saldoNettoDanilo)),
+          E('small', {class:'mu', style:'font-size:11px;display:block;margin-top:4px'}, `(Incassati: +${eur(shiftStats.incassiDanilo)} · Pagati: −${eur(shiftStats.pagatiDanilo)})`)
         )
       )
     ),
