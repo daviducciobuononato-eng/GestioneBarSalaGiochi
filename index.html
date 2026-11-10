@@ -1199,10 +1199,30 @@ function mostraOperazioniTurnoBet(s){
 }
 
 function betClientiView(m) {
-  const betClients = S.clienti.filter(x => x.tipo === 'bet');
+  // Raccoglie tutti i clienti scommesse e quelli che hanno movimenti scommesse a loro nome
+  const betClientsMap = new Map();
+
+  // 1. Aggiungi i clienti registrati come bet o senza tipo specifico
+  (S.clienti || []).forEach(c => {
+    if (!c.tipo || c.tipo === 'bet') {
+      betClientsMap.set(c.nome.trim().toLowerCase(), c);
+    }
+  });
+
+  // 2. Aggiungi eventuali clienti presenti nei movimenti ma non ancora presenti nella mappa
+  (S.bet_mov || []).forEach(mov => {
+    if (mov.cliente && mov.cliente.toUpperCase() !== 'CASSA') {
+      const key = mov.cliente.trim().toLowerCase();
+      if (!betClientsMap.has(key)) {
+        betClientsMap.set(key, { id: nid('cli'), nome: mov.cliente.trim(), tipo: 'bet' });
+      }
+    }
+  });
+
+  const allBetClients = Array.from(betClientsMap.values());
   let totDeb = 0, totCred = 0;
 
-  betClients.forEach(c => {
+  allBetClients.forEach(c => {
     const st = getBetClientStats(c.nome);
     if (st.saldoNetto > 0) totDeb += st.saldoNetto;
     else if (st.saldoNetto < 0) totCred += Math.abs(st.saldoNetto);
@@ -1228,7 +1248,7 @@ function betClientiView(m) {
     )
   );
 
-  const sorted = [...betClients].sort((a,b) => a.nome.localeCompare(b.nome, 'it', {sensitivity:'base'}));
+  const sorted = [...allBetClients].sort((a,b) => a.nome.localeCompare(b.nome, 'it', {sensitivity:'base'}));
 
   if (sorted.length === 0) {
     m.append(E('p', {class:'mu'}, 'Nessun cliente scommesse registrato.'));
