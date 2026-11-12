@@ -1462,7 +1462,9 @@ function betTurnoView(m){
       if (!isDanilo) {
         totaleVerdi += x.imp;
       }
-    } else if (x.tipo === 'paga' || x.tipo === 'uscita') {
+    } else if (x.tipo === 'uscita') {
+      totaleRossi += x.imp;
+    } else if (x.tipo === 'paga') {
       if (isDanilo) {
         totaleRossi += x.imp;
       }
