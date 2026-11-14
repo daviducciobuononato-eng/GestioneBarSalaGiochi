@@ -1452,10 +1452,12 @@ function betTurnoView(m){
     const isBanco = !!x.pagatoContantiBanco;
 
     if (x.tipo === 'debito') {
-      totaleRossi += x.imp;
+      if (!isDanilo) {
+        totaleRossi += x.imp;
+      }
     } else if (x.tipo === 'accredito') {
       const incideCassa = (isRicarica && !isDanilo) || isBanco;
-      if (!incideCassa) {
+      if (!incideCassa && !isDanilo) {
         totaleVerdi += x.imp;
       }
     } else if (x.tipo === 'incasso_debito') {
@@ -1613,8 +1615,8 @@ function opsScommesse(shiftId = null){
     const badgeClass = (isDeb || isPaga || isUsc) ? 'neg' : 'pos';
     const sign = (isPaga || isUsc) ? '− ' : (isDeb ? '' : '+ ');
 
-    const tagDaniloText = x.tipo === 'debito' ? '👤 DEBITO STORNATO DA DANILO (NON IN CASSA)' :
-                          x.tipo === 'accredito' ? '👤 ACCREDITATO DA DANILO (NON IN CASSA)' :
+    const tagDaniloText = x.tipo === 'debito' ? '👤 DEBITO SEGNATO DA DANILO (NON IN REGISTRO)' :
+                          x.tipo === 'accredito' ? '👤 ACCREDITATO DA DANILO (NON IN CASSA / REGISTRO)' :
                           x.tipo === 'paga' ? '👤 PAGATO DA DANILO (NON IN CASSA)' :
                           '👤 INCASSATO DA DANILO (NON IN CASSA)';
 
@@ -1671,7 +1673,8 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
   const checkDanilo = E('input', {type:'checkbox', style:'width:20px;height:20px;margin-right:8px'});
   const checkPagatoBanco = E('input', {type:'checkbox', style:'width:20px;height:20px;margin-right:8px'});
 
-  const textDanilo = tipoOp === 'accredito' ? 'Accreditato da Danilo (non incide nel cassetto contanti)' :
+  const textDanilo = tipoOp === 'debito' ? 'Debito segnato da Danilo (non incide nel Registro Turno)' :
+                     tipoOp === 'accredito' ? 'Accreditato da Danilo (non incide nel cassetto né nel Registro Turno)' :
                      tipoOp === 'paga' ? 'Pagato da Danilo (non incide nel cassetto contanti)' :
                      'Incassato da Danilo (non incide nel cassetto contanti)';
 
@@ -1679,7 +1682,7 @@ function apriModalScommessa(tipoOp, preselectedClientId=null) {
     ? '💵 PAGA DAL CASSETTO (CLIENTE RIMANE INVARIATO)'
     : '💵 PAGATO SUBITO IN CONTANTI AL BANCO (entra in cassa, saldo cliente invariato)';
 
-  const showDanilo = (tipoOp !== 'debito');
+  const showDanilo = true;
   const showPagatoBanco = (tipoOp !== 'debito' && tipoOp !== 'incasso');
 
   const bodyModal = E('div', {},
