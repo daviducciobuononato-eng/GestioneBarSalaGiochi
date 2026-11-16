@@ -1467,9 +1467,7 @@ function betTurnoView(m){
     } else if (x.tipo === 'uscita') {
       totaleRossi += x.imp;
     } else if (x.tipo === 'paga') {
-      if (isDanilo) {
-        totaleRossi += x.imp;
-      }
+      totaleRossi += x.imp;
     } else if (x.tipo === 'entrata') {
       if (isDanilo) {
         totaleVerdi += x.imp;
